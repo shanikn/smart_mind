@@ -1,7 +1,7 @@
-# Smart Mind — Android
+# Smart Mind — Android & iOS
 
 Most note-taking apps are graveyards for ideas. Smart Mind brings your notes back —
-exactly when and where you need them, as a native Android app.
+exactly when and where you need them, as a native app for Android and iPhone (iOS).
 
 The app is built with React Native and Expo (SDK 54) in `mobile/`, backed by a FastAPI server
 in `api/` that runs on Azure.
@@ -43,7 +43,7 @@ phone does the location work and shows the notifications.
 
 | Layer | Technology |
 |---|---|
-| Android app | React Native (Expo SDK 54) + TypeScript |
+| Mobile app (Android, iOS) | React Native (Expo SDK 54) + TypeScript |
 | Location | expo-location (geofences, last-known position) |
 | Notifications | expo-notifications + expo-task-manager (local, no push server) |
 | Maps | Leaflet + OpenStreetMap tiles in react-native-webview (no Google key on the phone) |
@@ -57,9 +57,11 @@ phone does the location work and shows the notifications.
 | Testing | pytest (282 tests), jest (522 tests) |
 | Linting | flake8 (pre-commit hook), TypeScript `tsc --noEmit` |
 
-## Running On Android
+## Running the App
 
-### Prerequisites
+The same code in `mobile/` builds for Android and iOS.
+
+### Android prerequisites
 
 1. Install [Android Studio](https://developer.android.com/studio) and, from its SDK Manager,
    the Android SDK and platform tools.
@@ -67,17 +69,27 @@ phone does the location work and shows the notifications.
 3. Set `ANDROID_HOME` to your Android SDK path (on Windows usually
    `%LOCALAPPDATA%\Android\Sdk`) and add `%ANDROID_HOME%\platform-tools` to your `PATH`.
 
+### iOS prerequisites
+
+1. For local builds (`npx expo run:ios`), a Mac with [Xcode](https://developer.apple.com/xcode/) installed.
+   Use the iOS Simulator (from Xcode), or connect an iPhone and sign the app with your Apple ID in Xcode.
+2. Without a Mac (e.g. on Windows), build in the cloud with [EAS Build](https://docs.expo.dev/build/introduction/):
+   `eas build --platform ios` from `mobile/`. It needs an Expo account, and an Apple Developer account
+   to install the build on an iPhone.
+3. Put the Firebase iOS config file `GoogleService-Info.plist` in `mobile/` (from the Firebase console).
+
 ### Build and run
 
 ```bash
 cd mobile
 npm install
-npx expo run:android
+npx expo run:android   # Android
+npx expo run:ios       # iOS (on a Mac)
 ```
 
-This builds the native Android project and installs the app on the running emulator or connected
-device. Rebuild with `npx expo run:android` after adding a native package (a JavaScript reload isn't
-enough).
+This builds the native project and installs the app on the running emulator/simulator or connected
+device. Rebuild with `npx expo run:android` / `npx expo run:ios` after adding a native package (a
+JavaScript reload isn't enough).
 
 ### Using a local backend
 
@@ -85,14 +97,15 @@ By default the app uses the deployed Azure API. To use a backend running on your
 
 1. In `mobile/`, create a `.env` file.
 2. Set `EXPO_PUBLIC_API_BASE_URL` to your backend's address:
-   - Emulator: `http://10.0.2.2:8000` (the emulator's alias for your computer)
+   - Android emulator: `http://10.0.2.2:8000` (the emulator's alias for your computer)
+   - iOS Simulator: `http://localhost:8000` (the simulator shares your Mac's network)
    - Physical device: `http://YOUR_COMPUTER_LAN_IP:8000`, e.g. `http://192.168.1.100:8000`
 3. Start the backend so it listens on your network:
    `uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload`
-4. Rebuild/restart the app with `npx expo run:android` from `mobile/`.
+4. Rebuild/restart the app with `npx expo run:android` or `npx expo run:ios` from `mobile/`.
 
 Notes:
-- Don't use `localhost` — on Android it refers to the device itself.
+- On Android and on a physical iPhone, don't use `localhost` — there it refers to the device itself.
 - On a physical device, the phone and computer must be on the same Wi-Fi.
 - If Windows Firewall prompts for access, allow it for private networks.
 - The backend needs its own environment (see below).
