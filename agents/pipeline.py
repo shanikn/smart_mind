@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from agents.clock import local_now
 from agents.ingestion import ingest_note
 from agents.categorizer import (
-    categorize, infer_place, infer_time,
+    categorize, infer_place, infer_time, has_written_clock, is_about_arriving,
     infer_date, default_time_for, DATE_ONLY_TIME, infer_store_type,
 )
 from agents.relevance import get_relevant_notes, collection
@@ -118,17 +118,22 @@ def compute_enrichment(note: Note, places: list, now: datetime) -> dict:
         place = infer_place(note.content, places)
     contexts = [place.id] if place else []
     # use manual hour override if set, otherwise infer
-    # from content or fall back to the place's default
+    # from content or fall back to the place's default.
+    # "when I get home ..." alerts on arriving, so it gets no guessed time:
+    # only a clock time written in it ("when I get home at 18:00")
+    arriving = is_about_arriving(note.content)
     if note.remind_time_explicit and note.remind_at_hour is not None:
         minute = note.remind_at_minute or 0
         time = f"{note.remind_at_hour:02d}:{minute:02d}"
+    elif arriving and not has_written_clock(note.content):
+        time = None
     else:
         time = infer_time(note.content)
     if note.remind_date_explicit and note.remind_on_date is not None:
         resolved_date = note.remind_on_date
     else:
         resolved_date = infer_date(note.content, now)
-    if time is None:
+    if time is None and not arriving:
         # a day without a time gets a morning alarm on that day
         later_day = resolved_date and resolved_date > now.strftime("%Y-%m-%d")
         if later_day and not note.remind_date_explicit:

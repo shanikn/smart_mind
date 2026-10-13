@@ -224,6 +224,64 @@ def infer_date(content: str, now: Optional[datetime] = None) -> Optional[str]:
     return None
 
 
+# ---- notes about arriving ("when I get home ...") ----
+#
+# They alert on arriving at the place, whatever the hour, so they get no
+# guessed time: not the place's default, and not a word like "dinner" read
+# as 20:00. Only a clock time written in the note ("at 18:00") is kept.
+# Same phrases as the phone's isAboutArriving (mobile/src/lib/arrivalNotes.ts),
+# plus Hebrew: "כשאגיע", "כשאני מגיעה", "כשאחזור", "ברגע שאהיה"...
+
+_arrival_english = re.compile(
+    r"\b(arriv\w*|on arrival|when i (get|reach|come)\b|get(ting)? (home|there|back|to)\b"
+    r"|when i'?m (at|home|there|back)|when i am (at|home|there|back)"
+    r"|once i'?m|once i am|once i (get|reach))"
+)
+# כש / ברגע ש / אחרי ש, maybe אני, then a verb of arriving or being there:
+# אגיע מגיע(ה) נגיע, אחזור חוזר(ת) נחזור, אהיה נהיה
+_arrival_hebrew = re.compile(
+    "(?:\u05db\u05e9|\u05d1\u05e8\u05d2\u05e2 \u05e9|\u05d0\u05d7\u05e8\u05d9 \u05e9)"
+    "(?:\u05d0\u05e0\u05d9\\s+)?"
+    "(?:\u05d0\u05d2\u05d9\u05e2|\u05de\u05d2\u05d9\u05e2\u05d4?|\u05e0\u05d2\u05d9\u05e2"
+    "|\u05d0\u05d7\u05d6\u05d5\u05e8|\u05d7\u05d5\u05d6\u05e8\u05ea?|\u05e0\u05d7\u05d6\u05d5\u05e8"
+    "|\u05d0\u05d4\u05d9\u05d4|\u05e0\u05d4\u05d9\u05d4)"
+)
+
+# where an arrival note is going, by Place.kind; Hebrew words may carry
+# prefix letters ("לעבודה", "בבית"). Only used for notes about arriving:
+# on its own "עבודה" is often an assignment.
+arrival_destinations = {
+    "home": ["home", "house", "\u05d1\u05d9\u05ea", "\u05d4\u05d1\u05d9\u05ea\u05d4"],  # בית הביתה
+    "uni": ["uni", "university", "campus",
+            "\u05d0\u05d5\u05e0\u05d9\u05d1\u05e8\u05e1\u05d9\u05d8\u05d4",  # אוניברסיטה
+            "\u05d0\u05d5\u05e0\u05d9", "\u05e7\u05de\u05e4\u05d5\u05e1"],  # אוני קמפוס
+    "work": ["work", "office", "\u05e2\u05d1\u05d5\u05d3\u05d4", "\u05de\u05e9\u05e8\u05d3"],  # עבודה משרד
+}
+
+
+# a clock time written in the note: "18:00", "at 6pm"; not "dinner"
+_written_clock = re.compile(r"(?<![\d:/.])\d{1,2}(?::\d{2}|\s*(?:am|pm)\b)")
+
+
+def has_written_clock(content: str) -> bool:
+    return bool(_written_clock.search(content.lower()))
+
+
+def is_about_arriving(content: str) -> bool:
+    lower = content.lower().replace("\u2019", "'")
+    return bool(_arrival_english.search(lower) or _arrival_hebrew.search(lower))
+
+
+def _arrival_destination(content: str, places: list):
+    """For a note about arriving, the Home/Uni/Work place it's going to."""
+    tokens = _tokens(content)
+    for place in places:
+        words = arrival_destinations.get(place.kind, [])
+        if any(_token_is(t, w) for t in tokens for w in words):
+            return place
+    return None
+
+
 # alarm time for a note that names a day but no time
 DATE_ONLY_TIME = "08:00"
 
@@ -349,6 +407,7 @@ def match_place_by_name(content: str, places: list):
 def infer_place(content: str, places: list):
     """The user's place a note belongs to, or None.
     1. a place the note names (match_place_by_name)
+    1b. for a note about arriving, where it's going ("when I get home")
     2. the built-in keywords of Home / Uni / Work
     3. semantic similarity between the note and each place's name + keywords
     """
@@ -357,6 +416,10 @@ def infer_place(content: str, places: list):
     named = match_place_by_name(content, places)
     if named:
         return named
+    if is_about_arriving(content):
+        destination = _arrival_destination(content, places)
+        if destination:
+            return destination
     text = content.lower()
     for place in places:
         if place.kind and any(_has_word(text, w) for w in kind_keywords.get(place.kind, [])):
