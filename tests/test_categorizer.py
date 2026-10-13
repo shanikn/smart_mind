@@ -218,3 +218,52 @@ def test_get_something_is_an_errand():
 
 def test_get_to_an_exam_is_an_event_not_an_errand():
     assert categorize("get to the exam on the 9th of October") == "event"
+
+
+# a time written without "at": "the 9:45 exam"
+def test_infer_time_without_at():
+    assert infer_time("the 9:45 exam") == "09:45"
+    assert infer_time("exam 14:30 in room 3") == "14:30"
+    assert infer_time("dentist 4pm") == "16:00"
+    assert infer_time("standup 9:30am") == "09:30"
+
+
+def test_infer_time_ignores_numbers_that_are_not_times():
+    assert infer_time("read pages 25:99") is None
+    assert infer_time("exam on 9/10") is None
+    assert infer_time("buy 2 milk") is None
+
+
+# "20 minutes early" moves the alarm before the time written in the note
+def test_infer_time_subtracts_lead_time():
+    note = "Get 20 minutes early to the 9:45 exam on the 9th of October"
+    assert infer_time(note) == "09:25"
+
+
+def test_infer_time_lead_time_with_typo():
+    note = "Get 20 minuets early to the 9:45 exam in on the 9th of October"
+    assert infer_time(note) == "09:25"
+
+
+def test_infer_time_lead_time_phrasings():
+    assert infer_time("be there 15 mins before the 10:00 meeting") == "09:45"
+    assert infer_time("leave half an hour early for the 18:00 concert") == "17:30"
+    assert infer_time("arrive an hour before the flight at 14:00") == "13:00"
+    assert infer_time("get there 1.5 hours early for the 12:00 flight") == "10:30"
+    assert infer_time("2 hours before the party at 8pm") == "18:00"
+
+
+def test_infer_time_lead_time_hebrew():
+    assert infer_time("להגיע 20 דקות לפני המבחן ב9:45") == "09:25"
+    assert infer_time("להגיע חצי שעה לפני הפגישה ב-10:00") == "09:30"
+    assert infer_time("לצאת שעה לפני הטיסה ב14:00") == "13:00"
+    assert infer_time("להגיע רבע שעה מוקדם לשיעור ב8:30") == "08:15"
+
+
+def test_infer_time_lead_time_without_a_time_is_ignored():
+    # no time written: nothing to subtract from
+    assert infer_time("get 20 minutes early to the exam") is None
+
+
+def test_infer_time_in_minutes_is_not_a_lead_time():
+    assert infer_time("call mom at 18:00, in 20 minutes") == "18:00"

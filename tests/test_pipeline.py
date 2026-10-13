@@ -146,3 +146,18 @@ def test_ideas_are_never_returned_as_reminders():
     delete_any(todo.id)
     assert idea.id not in ids
     assert todo.id in ids
+
+
+def test_lead_time_moves_the_alarm_before_the_written_time():
+    from datetime import datetime
+    from agents.pipeline import compute_enrichment, reminder_time_source
+    from places import Place
+
+    uni = Place(id="p-uni", user_id=None, name="Uni", kind="uni")
+    note = Note(content="Get 20 minuets early to the 9:45 exam in on the 9th of October")
+    fields = compute_enrichment(note, [uni], datetime(2026, 10, 4, 13, 0))
+
+    assert fields["contexts"] == ["p-uni", "09:25"]
+    assert fields["remind_on_date"] == "2026-10-09"
+    note.contexts = fields["contexts"]
+    assert reminder_time_source(note) == "text"
