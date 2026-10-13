@@ -26,6 +26,7 @@ import { syncStoreAlerts } from "./src/services/storeAlerts";
 import { Note } from "./src/types/notes";
 import { fonts } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/ThemeContext";
+import { linkingFor } from "./src/navigation/linking";
 
 export type NotesStackParamList = {
   NotesList: undefined;
@@ -179,6 +180,8 @@ function RootNavigator() {
       },
     };
   }, [dark, colors]);
+  // deep links (the iPhone widget's smartmind://new-note) only when signed in
+  const linking = useMemo(() => linkingFor(!!user), [user]);
 
   if (loading || !fontsLoaded) {
     return (
@@ -190,7 +193,7 @@ function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer theme={navigationTheme} linking={linking}>
       <StatusBar style={dark ? "light" : "dark"} />
       {user ? <MainTabs /> : <LoginScreen />}
     </NavigationContainer>

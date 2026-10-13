@@ -2,6 +2,7 @@
   "expo": {
     "name": "Smart Mind",
     "slug": "mobile",
+    "scheme": "smartmind",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,6 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.shanini.smartmind",
+      "appleTeamId": "8U97QRUZA5",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -73,7 +75,8 @@
         {
           "supportsRTL": false
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ]
   }
 }
