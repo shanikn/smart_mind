@@ -8,7 +8,8 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.shanini.mobile",
+      "bundleIdentifier": "com.shanini.smartmind",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSUserNotificationUsageDescription": "Smart Mind uses notifications to remind you about notes at the right moment."
@@ -47,6 +48,8 @@
         "expo-location",
         {
           "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "locationWhenInUsePermission": "Smart Mind uses your location to show the right notes when you arrive at your saved places.",
           "locationAlwaysAndWhenInUsePermission": "Smart Mind uses your location to show the right notes when you arrive at your saved places.",
           "isAndroidForegroundServiceEnabled": false
         }
