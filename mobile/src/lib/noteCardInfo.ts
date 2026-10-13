@@ -27,7 +27,9 @@ const CATEGORY_ICONS: Record<Category, IconName> = {
   event: "calendar-outline",
 };
 
-export type Trailing = { kind: "time"; time: string } | { kind: "smart" } | { kind: "off" };
+// smart: Smart picked the time (from the note's text or the place's default),
+// not the user in the Time picker, so the card shows it in green with sparkles
+export type Trailing = { kind: "time"; time: string; smart: boolean } | { kind: "smart" } | { kind: "off" };
 
 export interface NoteCardInfo {
   icon: IconName;
@@ -54,8 +56,10 @@ export function noteCardInfo(
   if (!canAlert(note)) {
     trailing = { kind: "off" };
   } else if (time) {
-    trailing = { kind: "time", time };
+    const userSet = note.remind_time_explicit === true && note.remind_at_hour != null;
+    trailing = { kind: "time", time, smart: !userSet };
   } else {
+    // no time at all (a place-only note): it alerts on arrival
     trailing = { kind: "smart" };
   }
   return {

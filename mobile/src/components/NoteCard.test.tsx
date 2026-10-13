@@ -70,3 +70,32 @@ test.each(CATEGORIES.map((c) => [c]))("the %s label on the card is drawn in its 
   expect(color).not.toBe(lightColors.textMuted);
   expect(Math.abs(hueOf(color) - hueOf(DEFAULT_CATEGORY_COLORS[category]))).toBeLessThanOrEqual(2);
 });
+
+describe("the alert time on the right", () => {
+  const timeText = (tree: ReactTestRenderer, time: string) =>
+    tree.root.findAllByType(Text).find((t) => t.props.children === time);
+  const sparkles = (tree: ReactTestRenderer) =>
+    tree.root.findAll((n) => n.props.name === "sparkles-outline" && typeof n.type !== "string");
+
+  test("a time Smart picked shows in green with the Smart sparkles next to it", async () => {
+    const tree = await renderCard(jest.fn(), { ...NOTE, contexts: ["18:00"] } as Note);
+    const time = timeText(tree, "18:00")!;
+    expect(time).toBeDefined();
+    expect(StyleSheet.flatten(time.props.style).color).toBe(lightColors.primary);
+    expect(sparkles(tree).length).toBeGreaterThan(0);
+  });
+
+  test("a time the user set shows plain, without sparkles", async () => {
+    const set = { ...NOTE, remind_time_explicit: true, remind_at_hour: 18, remind_at_minute: 0 } as Note;
+    const tree = await renderCard(jest.fn(), set);
+    const time = timeText(tree, "18:00")!;
+    expect(StyleSheet.flatten(time.props.style).color).toBe(lightColors.text);
+    expect(sparkles(tree)).toHaveLength(0);
+  });
+
+  test("no time at all (place only): just the sparkles", async () => {
+    const tree = await renderCard(jest.fn(), NOTE);
+    expect(tree.root.findAllByType(Text).some((t) => /^\d{2}:\d{2}$/.test(String(t.props.children)))).toBe(false);
+    expect(sparkles(tree).length).toBeGreaterThan(0);
+  });
+});

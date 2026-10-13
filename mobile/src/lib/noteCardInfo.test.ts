@@ -116,14 +116,37 @@ describe("meta line", () => {
 });
 
 describe("right side", () => {
-  test("the time when there is one", () => {
-    expect(noteCardInfo(note({ contexts: ["17:54"] }), PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({
+  test("a time the user set: plain time", () => {
+    const set = note({ remind_time_explicit: true, remind_at_hour: 8, remind_at_minute: 5 });
+    expect(noteCardInfo(set, PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({
       kind: "time",
-      time: "17:54",
+      time: "08:05",
+      smart: false,
     });
   });
 
-  test("smart alerts: sparkles", () => {
+  test("a time Smart picked (from the note text or a place default): the time, marked smart", () => {
+    expect(noteCardInfo(note({ contexts: ["17:54"] }), PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({
+      kind: "time",
+      time: "17:54",
+      smart: true,
+    });
+    expect(
+      noteCardInfo(note({ contexts: ["id-home", "09:00"], reminder_time_source: "default" }), PLACES, DEFAULT_CATEGORY_COLORS)
+        .trailing
+    ).toEqual({ kind: "time", time: "09:00", smart: true });
+  });
+
+  test("a leftover hour without the 'set by me' flag still counts as Smart", () => {
+    const leftover = note({ remind_time_explicit: false, remind_at_hour: 14, remind_at_minute: 0 });
+    expect(noteCardInfo(leftover, PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({
+      kind: "time",
+      time: "14:00",
+      smart: true,
+    });
+  });
+
+  test("smart alerts with no time at all (place only): just sparkles", () => {
     expect(noteCardInfo(note({}), PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({ kind: "smart" });
   });
 

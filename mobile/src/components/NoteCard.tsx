@@ -71,7 +71,15 @@ export default function NoteCard({ note, onPress, onDelete, places, categoryColo
         </View>
 
         <View style={styles.trailing}>
-          {info.trailing.kind === "time" && <Text style={styles.time}>{info.trailing.time}</Text>}
+          {info.trailing.kind === "time" &&
+            (info.trailing.smart ? (
+              <View style={styles.smartTime} accessibilityLabel={`Smart alert at ${info.trailing.time}`}>
+                <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+                <Text style={[styles.time, styles.smartTimeText]}>{info.trailing.time}</Text>
+              </View>
+            ) : (
+              <Text style={styles.time}>{info.trailing.time}</Text>
+            ))}
           {info.trailing.kind === "smart" && (
             <Ionicons name="sparkles-outline" size={20} color={colors.primary} accessibilityLabel="Smart alerts" />
           )}
@@ -113,6 +121,8 @@ const makeStyles = ({ colors, type }: Theme) =>
     color: colors.text,
     fontVariant: ["tabular-nums"],
   },
+  smartTime: { flexDirection: "row", alignItems: "center", gap: 4 },
+  smartTimeText: { color: colors.primary },
   deleteAction: {
     width: 96,
     borderRadius: radius.noteCard,
