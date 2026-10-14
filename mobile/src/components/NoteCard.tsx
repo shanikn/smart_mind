@@ -73,12 +73,14 @@ export default function NoteCard({ note, onPress, onDelete, places, categoryColo
         <View style={styles.trailing}>
           {info.trailing.kind === "time" &&
             (info.trailing.smart ? (
-              <View style={styles.smartTime} accessibilityLabel={`Smart alert at ${info.trailing.time}`}>
+              <View style={styles.smartTime} accessible accessibilityLabel={info.trailing.accessibilityLabel}>
                 <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
-                <Text style={[styles.time, styles.smartTimeText]}>{info.trailing.time}</Text>
+                <Text style={[styles.time, styles.smartTimeText]}>{info.trailing.label}</Text>
               </View>
             ) : (
-              <Text style={styles.time}>{info.trailing.time}</Text>
+              <Text style={styles.time} accessibilityLabel={info.trailing.accessibilityLabel}>
+                {info.trailing.label}
+              </Text>
             ))}
           {info.trailing.kind === "smart" && (
             <Ionicons name="sparkles-outline" size={20} color={colors.primary} accessibilityLabel="Smart alerts" />

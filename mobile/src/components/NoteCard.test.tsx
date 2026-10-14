@@ -93,6 +93,50 @@ describe("the alert time on the right", () => {
     expect(sparkles(tree)).toHaveLength(0);
   });
 
+  // local "YYYY-MM-DD" for today + n days
+  const dayIn = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const labelled = (tree: ReactTestRenderer, label: string) =>
+    tree.root.findAll((n) => n.props.accessibilityLabel === label && typeof n.type !== "string");
+
+  test("a Smart time tomorrow shows the day, still green with sparkles, and says the day", async () => {
+    const tree = await renderCard(jest.fn(), { ...NOTE, contexts: ["09:25"], remind_on_date: dayIn(1) } as Note);
+    const time = timeText(tree, "Tomorrow 09:25")!;
+    expect(time).toBeDefined();
+    expect(StyleSheet.flatten(time.props.style).color).toBe(lightColors.primary);
+    expect(sparkles(tree).length).toBeGreaterThan(0);
+    expect(labelled(tree, "Smart alert tomorrow at 09:25").length).toBeGreaterThan(0);
+  });
+
+  test("a time the user set for a later day shows the date, plain, and says it", async () => {
+    const later = new Date();
+    later.setDate(later.getDate() + 9);
+    const short = `${later.getDate()} ${later.toLocaleString("en-GB", { month: "short" })}`;
+    const set = {
+      ...NOTE,
+      remind_time_explicit: true,
+      remind_at_hour: 9,
+      remind_at_minute: 25,
+      remind_on_date: dayIn(9),
+    } as Note;
+    const tree = await renderCard(jest.fn(), set);
+    const time = timeText(tree, `${short} 09:25`)!;
+    expect(time).toBeDefined();
+    expect(StyleSheet.flatten(time.props.style).color).toBe(lightColors.text);
+    expect(sparkles(tree)).toHaveLength(0);
+    const long = later.toLocaleString("en-GB", { month: "long" });
+    expect(labelled(tree, `Alert on ${later.getDate()} ${long} at 09:25`).length).toBeGreaterThan(0);
+  });
+
+  test("a Smart time today shows just the time", async () => {
+    const tree = await renderCard(jest.fn(), { ...NOTE, contexts: ["09:25"], remind_on_date: dayIn(0) } as Note);
+    expect(timeText(tree, "09:25")).toBeDefined();
+    expect(labelled(tree, "Smart alert at 09:25").length).toBeGreaterThan(0);
+  });
+
   test("no time at all (place only): just the sparkles", async () => {
     const tree = await renderCard(jest.fn(), NOTE);
     expect(tree.root.findAllByType(Text).some((t) => /^\d{2}:\d{2}$/.test(String(t.props.children)))).toBe(false);

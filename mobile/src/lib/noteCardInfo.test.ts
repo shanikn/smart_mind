@@ -118,7 +118,7 @@ describe("meta line", () => {
 describe("right side", () => {
   test("a time the user set: plain time", () => {
     const set = note({ remind_time_explicit: true, remind_at_hour: 8, remind_at_minute: 5 });
-    expect(noteCardInfo(set, PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({
+    expect(noteCardInfo(set, PLACES, DEFAULT_CATEGORY_COLORS).trailing).toMatchObject({
       kind: "time",
       time: "08:05",
       smart: false,
@@ -126,7 +126,7 @@ describe("right side", () => {
   });
 
   test("a time Smart picked (from the note text or a place default): the time, marked smart", () => {
-    expect(noteCardInfo(note({ contexts: ["17:54"] }), PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({
+    expect(noteCardInfo(note({ contexts: ["17:54"] }), PLACES, DEFAULT_CATEGORY_COLORS).trailing).toMatchObject({
       kind: "time",
       time: "17:54",
       smart: true,
@@ -134,12 +134,12 @@ describe("right side", () => {
     expect(
       noteCardInfo(note({ contexts: ["id-home", "09:00"], reminder_time_source: "default" }), PLACES, DEFAULT_CATEGORY_COLORS)
         .trailing
-    ).toEqual({ kind: "time", time: "09:00", smart: true });
+    ).toMatchObject({ kind: "time", time: "09:00", smart: true });
   });
 
   test("a leftover hour without the 'set by me' flag still counts as Smart", () => {
     const leftover = note({ remind_time_explicit: false, remind_at_hour: 14, remind_at_minute: 0 });
-    expect(noteCardInfo(leftover, PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({
+    expect(noteCardInfo(leftover, PLACES, DEFAULT_CATEGORY_COLORS).trailing).toMatchObject({
       kind: "time",
       time: "14:00",
       smart: true,
@@ -160,6 +160,54 @@ describe("right side", () => {
     expect(
       noteCardInfo(note({ reminders_enabled: false, contexts: ["17:54"] }), PLACES, DEFAULT_CATEGORY_COLORS).trailing
     ).toEqual({ kind: "off" });
+  });
+});
+
+describe("the day of an alert that isn't today", () => {
+  // Wednesday 14 Oct 2026, 12:00
+  const NOW = new Date(2026, 9, 14, 12, 0);
+  const at = (remind_on_date: string | null, fields: Partial<Note> = {}) =>
+    noteCardInfo(note({ contexts: ["09:25"], remind_on_date, ...fields }), PLACES, DEFAULT_CATEGORY_COLORS, colors, NOW)
+      .trailing;
+
+  test.each([
+    ["no date (repeats daily)", null, null, "09:25", "Smart alert at 09:25"],
+    ["today", "2026-10-14", null, "09:25", "Smart alert at 09:25"],
+    ["tomorrow", "2026-10-15", "Tomorrow", "Tomorrow 09:25", "Smart alert tomorrow at 09:25"],
+    ["in 2 days", "2026-10-16", "Fri", "Fri 09:25", "Smart alert on Friday at 09:25"],
+    ["in 6 days", "2026-10-20", "Tue", "Tue 09:25", "Smart alert on Tuesday at 09:25"],
+    ["in 7 days", "2026-10-21", "21 Oct", "21 Oct 09:25", "Smart alert on 21 October at 09:25"],
+    ["further out", "2026-10-23", "23 Oct", "23 Oct 09:25", "Smart alert on 23 October at 09:25"],
+    ["next month", "2026-11-02", "2 Nov", "2 Nov 09:25", "Smart alert on 2 November at 09:25"],
+    ["yesterday (overdue)", "2026-10-13", "13 Oct", "13 Oct 09:25", "Smart alert on 13 October at 09:25"],
+    ["last week (overdue)", "2026-10-05", "5 Oct", "5 Oct 09:25", "Smart alert on 5 October at 09:25"],
+  ])("%s", (_name, date, day, label, spoken) => {
+    expect(at(date)).toEqual({
+      kind: "time",
+      time: "09:25",
+      day,
+      label,
+      accessibilityLabel: spoken,
+      smart: true,
+    });
+  });
+
+  test("a time the user set gets the day too, and stays not smart", () => {
+    const set = at("2026-10-15", { remind_time_explicit: true, remind_at_hour: 9, remind_at_minute: 25 });
+    expect(set).toEqual({
+      kind: "time",
+      time: "09:25",
+      day: "Tomorrow",
+      label: "Tomorrow 09:25",
+      accessibilityLabel: "Alert tomorrow at 09:25",
+      smart: false,
+    });
+  });
+
+  test("a dated note with no time keeps just the sparkles", () => {
+    expect(
+      noteCardInfo(note({ remind_on_date: "2026-10-15" }), PLACES, DEFAULT_CATEGORY_COLORS, colors, NOW).trailing
+    ).toEqual({ kind: "smart" });
   });
 });
 

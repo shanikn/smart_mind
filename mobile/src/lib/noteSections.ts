@@ -13,10 +13,10 @@ export interface NoteSection {
   notes: Note[];
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function parseDay(value: string | null | undefined): Date | null {
+export function parseDay(value: string | null | undefined): Date | null {
   const m = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) {
     return null;
@@ -34,7 +34,7 @@ function dayLabel(d: Date): string {
 }
 
 // whole days from `from` to `to` (local dates, safe across DST)
-function dayDiff(from: Date, to: Date): number {
+export function dayDiff(from: Date, to: Date): number {
   return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000);
 }
 
