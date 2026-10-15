@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.shanini.smartmind",
       "appleTeamId": "8U97QRUZA5",
       "googleServicesFile": "./GoogleService-Info.plist",

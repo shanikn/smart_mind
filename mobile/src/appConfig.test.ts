@@ -15,6 +15,10 @@ test("Sign in with Apple is enabled on iOS", () => {
   expect(expo.ios.usesAppleSignIn).toBe(true);
 });
 
+test("iPhone only, no iPad", () => {
+  expect(expo.ios.supportsTablet).toBe(false);
+});
+
 test("the location texts say what the app does: arrivals, stores for errands, while closed", () => {
   const plugin = locationPlugin();
   const always = plugin.locationAlwaysAndWhenInUsePermission;
