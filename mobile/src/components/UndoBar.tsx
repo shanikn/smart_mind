@@ -17,7 +17,8 @@ export default function UndoBar({
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   return (
-    <View style={[styles.bar, style]} accessibilityLiveRegion="polite">
+    // alert role: iOS ignores accessibilityLiveRegion, VoiceOver announces alerts
+    <View style={[styles.bar, style]} accessibilityRole="alert" accessibilityLiveRegion="polite">
       <Text style={styles.message} numberOfLines={1}>
         {message}
       </Text>
