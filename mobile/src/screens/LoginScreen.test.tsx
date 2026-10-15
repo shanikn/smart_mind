@@ -102,11 +102,9 @@ test("password autofill hint follows the mode, and Enter on email moves to passw
   expect(inputs(tree)[1].props.autoComplete).toBe("new-password");
 });
 
-test("the sample note is hidden from screen readers", async () => {
+test("no sample note card on the sign-in screen (it looked like a real note)", async () => {
   const tree = await renderScreen();
-  const sample = tree.root.findByProps({ testID: "sample-note" });
-  expect(sample.props.importantForAccessibility).toBe("no-hide-descendants");
-  expect(sample.props.accessibilityElementsHidden).toBe(true);
+  expect(tree.root.findAllByProps({ testID: "sample-note" })).toHaveLength(0);
 });
 
 describe("Forgot password?", () => {

@@ -27,45 +27,13 @@ import {
   statusCodes,
 } from "@react-native-google-signin/google-signin";
 import { authErrorMessage, resetErrorMessage } from "../lib/authErrors";
-import { colorFor, DEFAULT_CATEGORY_COLORS, textColorFor } from "../lib/categoryColors";
-import { Card, IconTile, PrimaryButton, TextButton } from "../components/ui";
+import { Card, PrimaryButton, TextButton } from "../components/ui";
 import { MIN_TOUCH_TARGET, Theme, fonts, radius, spacing } from "../theme";
 import { useTheme, useThemedStyles } from "../ThemeContext";
 
 GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
 
 const RESET_SENT = "If an account exists for this email, we sent a reset link.";
-
-const TASK_COLOR = colorFor("todo", DEFAULT_CATEGORY_COLORS);
-
-// A note drawn like a card in the real list, to show what the app does
-// before signing in. Not a real note, so screen readers skip it.
-function SampleNote() {
-  const { colors, type } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-  return (
-    <View
-      testID="sample-note"
-      style={styles.sample}
-      importantForAccessibility="no-hide-descendants"
-      accessibilityElementsHidden
-    >
-      <IconTile icon="checkbox-outline" backgroundColor={TASK_COLOR} iconColor={textColorFor(TASK_COLOR)} />
-      <View style={styles.sampleBody}>
-        <Text style={type.body} numberOfLines={1}>
-          Water the plants
-        </Text>
-        <View style={styles.sampleMeta}>
-          <Text style={[type.caption, styles.sampleCategory]}>To-do</Text>
-          <Text style={type.caption}> · </Text>
-          <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-          <Text style={type.caption}> Home</Text>
-        </View>
-      </View>
-      <Text style={styles.sampleTime}>19:00</Text>
-    </View>
-  );
-}
 
 export default function LoginScreen() {
   const { colors, type } = useTheme();
@@ -170,8 +138,6 @@ export default function LoginScreen() {
             Write a note once. It comes back when you get to the place or time it's for.
           </Text>
 
-          <SampleNote />
-
           <Card>
             <TouchableOpacity
               style={styles.googleButton}
@@ -268,21 +234,6 @@ const makeStyles = ({ colors, type }: Theme) =>
   content: { padding: spacing.screen, paddingTop: 32, gap: spacing.cardGap },
   title: { fontFamily: fonts.display, fontSize: 34, lineHeight: 44, color: colors.text },
   subtitle: { fontFamily: fonts.body, color: colors.textMuted, marginBottom: 4 },
-  sample: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderRadius: radius.noteCard,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  sampleBody: { flex: 1 },
-  sampleMeta: { flexDirection: "row", alignItems: "center", marginTop: 2 },
-  sampleCategory: { fontFamily: fonts.bodySemi, color: TASK_COLOR },
-  sampleTime: { fontFamily: fonts.bodyBold, fontSize: 17, color: colors.text, fontVariant: ["tabular-nums"] },
   googleButton: {
     height: 48,
     borderRadius: radius.chip,
