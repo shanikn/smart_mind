@@ -20,7 +20,14 @@ import NoteCard from "../components/NoteCard";
 import { NotesStackParamList } from "../../App";
 import { addFolder, loadFolders, removeFolder, reorderFolders } from "../services/foldersStore";
 import { ALL, GENERAL, folderNames, folderTabs } from "../lib/folderOrder";
-import { getCategorySelection, getFolderTab, setCategorySelection, setFolderTab } from "../lib/notesListSelection";
+import {
+  getCategorySelection,
+  getFolderTab,
+  getPlaceSelection,
+  setCategorySelection,
+  setFolderTab,
+  setPlaceSelection,
+} from "../lib/notesListSelection";
 import FolderEditSheet from "../components/FolderEditSheet";
 import CategoryFilterSheet from "../components/CategoryFilterSheet";
 import UndoBar from "../components/UndoBar";
@@ -31,7 +38,7 @@ import { getReminderLocation } from "../lib/reminderPrefs";
 import { loadPlaces } from "../services/placesStore";
 import { ServerPlace } from "../lib/userPlaces";
 import { Category, CategoryColors, DEFAULT_CATEGORY_COLORS, getCategoryColors } from "../lib/categoryColors";
-import { filterNotes, hasActiveFilters } from "../lib/noteFilter";
+import { ANY_PLACE, filterNotes, hasActiveFilters, NO_PLACE } from "../lib/noteFilter";
 import { Chip, ChipRow, SectionLabel, TextButton } from "../components/ui";
 import { MIN_TOUCH_TARGET, Theme, fonts, radius, spacing } from "../theme";
 import { useTheme, useThemedStyles } from "../ThemeContext";
@@ -55,9 +62,10 @@ export default function NotesListScreen() {
   const [loadFailed, setLoadFailed] = useState(false);
   // focus refetches can overlap: only the newest one may update the screen
   const latestFetch = useRef(0);
-  // the folder tab and the checked categories; remembered while the app is open
+  // the folder tab, the checked categories and the picked place; remembered while the app is open
   const [activeTab, setActiveTab] = useState<string>(getFolderTab);
   const [checkedCategories, setCheckedCategories] = useState<string[]>(getCategorySelection);
+  const [pickedPlace, setPickedPlace] = useState<string>(getPlaceSelection);
   const [showFolderEditor, setShowFolderEditor] = useState(false);
   const [showCategoryFilter, setShowCategoryFilter] = useState(false);
   const [customLists, setCustomLists] = useState<string[]>([]);
@@ -120,16 +128,33 @@ export default function NotesListScreen() {
         : [...checkedCategories, category]
     );
 
-  // folder tab AND one of the checked categories AND the search (lib/noteFilter.ts)
-  const filters = { folder, categories: checkedCategories, query };
+  const choosePlace = (value: string) => {
+    setPickedPlace(value);
+    setPlaceSelection(value);
+  };
+
+  const placeIds = useMemo(() => places.map((p) => p.id), [places]);
+  // a remembered place that no longer exists shows All places
+  const place =
+    pickedPlace === ANY_PLACE || pickedPlace === NO_PLACE || placeIds.includes(pickedPlace) ? pickedPlace : ANY_PLACE;
+
+  // folder tab AND one of the checked categories AND the place AND the search (lib/noteFilter.ts)
+  const filters = { folder, categories: checkedCategories, query, place };
   const filteredNotes = useMemo(
-    () => filterNotes(visibleNotes, { folder, categories: checkedCategories, query }),
-    [visibleNotes, folder, checkedCategories, query]
+    () => filterNotes(visibleNotes, { folder, categories: checkedCategories, query, place }, placeIds),
+    [visibleNotes, folder, checkedCategories, query, place, placeIds]
   );
+  // the badge: checked categories, plus one for a place
+  const activeFilterCount = checkedCategories.length + (place === ANY_PLACE ? 0 : 1);
+
+  const clearFilter = () => {
+    chooseCategories([]);
+    choosePlace(ANY_PLACE);
+  };
 
   const clearSearchAndFilter = () => {
     setQuery("");
-    chooseCategories([]);
+    clearFilter();
   };
 
   // Recent: one list, newest first; Upcoming: the date sections
@@ -334,17 +359,17 @@ export default function NotesListScreen() {
             )}
           </View>
           <TouchableOpacity
-            style={[styles.filterButton, checkedCategories.length > 0 && styles.filterButtonActive]}
+            style={[styles.filterButton, activeFilterCount > 0 && styles.filterButtonActive]}
             onPress={() => setShowCategoryFilter(true)}
             accessibilityRole="button"
-            accessibilityLabel="Filter by category"
-            accessibilityValue={checkedCategories.length > 0 ? { text: `${checkedCategories.length} checked` } : undefined}
+            accessibilityLabel="Filter"
+            accessibilityValue={activeFilterCount > 0 ? { text: `${activeFilterCount} active` } : undefined}
           >
-            <Ionicons name="filter" size={22} color={checkedCategories.length > 0 ? colors.primaryDark : colors.text} />
-            {checkedCategories.length > 0 && (
+            <Ionicons name="filter" size={22} color={activeFilterCount > 0 ? colors.primaryDark : colors.text} />
+            {activeFilterCount > 0 && (
               <View style={styles.badge}>
-                <Text testID="category-filter-count" style={styles.badgeText}>
-                  {checkedCategories.length}
+                <Text testID="filter-count" style={styles.badgeText}>
+                  {activeFilterCount}
                 </Text>
               </View>
             )}
@@ -455,7 +480,10 @@ export default function NotesListScreen() {
         colors={categoryColors}
         checked={checkedCategories}
         onToggle={toggleCategory}
-        onClear={() => chooseCategories([])}
+        places={places}
+        place={place}
+        onPickPlace={choosePlace}
+        onClear={clearFilter}
         onClose={() => setShowCategoryFilter(false)}
       />
 

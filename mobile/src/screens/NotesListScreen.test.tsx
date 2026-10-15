@@ -3,7 +3,7 @@ import { Alert, AppState, StyleSheet, Text, TextInput, TouchableOpacity } from "
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TestRenderer, { act, ReactTestInstance, ReactTestRenderer } from "react-test-renderer";
 import NotesListScreen from "./NotesListScreen";
-import { setCategorySelection, setFolderTab } from "../lib/notesListSelection";
+import { setCategorySelection, setFolderTab, setPlaceSelection } from "../lib/notesListSelection";
 import { DEFAULT_CATEGORY_COLORS } from "../lib/categoryColors";
 import { deleteWithUndo, finishPendingDelete } from "../services/pendingDelete";
 import { getNotes } from "../api/notes";
@@ -85,6 +85,7 @@ jest.mock("../components/NoteCard", () => {
 beforeEach(() => {
   setFolderTab("All");
   setCategorySelection([]);
+  setPlaceSelection("all");
 });
 
 function shownNotes(tree: ReactTestRenderer): string[] {
@@ -164,7 +165,7 @@ const categoryOption = (tree: ReactTestRenderer, label: string) =>
     .find((t) => t.props.testID === "category-option" && t.props.accessibilityLabel === label)!;
 
 async function checkCategories(tree: ReactTestRenderer, ...labels: string[]) {
-  await act(async () => byLabel(tree, "Filter by category").props.onPress());
+  await act(async () => byLabel(tree, "Filter").props.onPress());
   for (const label of labels) {
     await act(async () => categoryOption(tree, label).props.onPress());
   }
@@ -242,7 +243,7 @@ describe("Recent / Upcoming toggle", () => {
       await pressTab(tree, "Uni");
       expect(shownNotes(tree)).toEqual(["לקנות חלב"]);
       await pressTab(tree, "All");
-      await act(async () => byLabel(tree, "Filter by category").props.onPress());
+      await act(async () => byLabel(tree, "Filter").props.onPress());
       await act(async () => byLabel(tree, "Clear").props.onPress());
       await act(async () => byLabel(tree, "Done").props.onPress());
       await type(tree, "milk");
@@ -493,15 +494,15 @@ describe("folder tabs and the folder sheet", () => {
 
 describe("the category filter", () => {
   const badge = (tree: ReactTestRenderer) =>
-    tree.root.findAll((n) => n.props.testID === "category-filter-count" && typeof n.type === "string")[0];
+    tree.root.findAll((n) => n.props.testID === "filter-count" && typeof n.type === "string")[0];
   const options = (tree: ReactTestRenderer) =>
     tree.root.findAllByType(TouchableOpacity).filter((t) => t.props.testID === "category-option");
   const openSheet = async (tree: ReactTestRenderer) =>
-    act(async () => byLabel(tree, "Filter by category").props.onPress());
+    act(async () => byLabel(tree, "Filter").props.onPress());
 
   test("the filter button: no count while nothing is checked", async () => {
     const tree = await renderScreen();
-    expect(byLabel(tree, "Filter by category")).toBeTruthy();
+    expect(byLabel(tree, "Filter")).toBeTruthy();
     expect(badge(tree)).toBeUndefined();
   });
 
@@ -531,7 +532,7 @@ describe("the category filter", () => {
     await act(async () => byLabel(tree, "Done").props.onPress());
     expect(shownNotes(tree).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
     expect(badge(tree).props.children).toBe(1);
-    expect(byLabel(tree, "Filter by category").props.accessibilityValue).toEqual({ text: "1 checked" });
+    expect(byLabel(tree, "Filter").props.accessibilityValue).toEqual({ text: "1 active" });
     await checkCategories(tree, "To-do");
     expect(shownNotes(tree)).toHaveLength(3);
     expect(badge(tree).props.children).toBe(2);
@@ -570,6 +571,117 @@ describe("the category filter", () => {
     expect(tree.root.findAllByType(TouchableOpacity).some((t) => t.props.accessibilityLabel === "Errand notes")).toBe(
       false
     );
+  });
+});
+
+describe("the place filter", () => {
+  const notesMock = jest.requireMock("../api/notes").getNotes as jest.Mock;
+  const placesMock = jest.requireMock("../services/placesStore").loadPlaces as jest.Mock;
+  // Buy milk: no place (a time only); the exam: at Uni; לקנות חלב: a deleted place
+  const PLACED = [
+    NOTES[0],
+    { ...NOTES[1], contexts: ["p-uni", "09:00"] },
+    { ...NOTES[2], contexts: ["p-gone"] },
+  ] as Note[];
+  const PLACES = [
+    { id: "p-home", name: "Home", keywords: [], kind: "home" },
+    { id: "p-uni", name: "Uni", keywords: [], kind: "uni" },
+    { id: "p-gym", name: "gym  on Dizengoff", keywords: [], kind: null },
+  ];
+  const placeOptions = (tree: ReactTestRenderer) =>
+    tree.root.findAllByType(TouchableOpacity).filter((t) => t.props.testID === "place-option");
+  const pickPlace = async (tree: ReactTestRenderer, label: string) => {
+    await act(async () => byLabel(tree, "Filter").props.onPress());
+    await act(async () => placeOptions(tree).find((o) => o.props.accessibilityLabel === label)!.props.onPress());
+    await act(async () => byLabel(tree, "Done").props.onPress());
+  };
+  const badge = (tree: ReactTestRenderer) =>
+    tree.root.findAll((n) => n.props.testID === "filter-count" && typeof n.type === "string")[0];
+
+  beforeEach(() => {
+    notesMock.mockImplementation(async () => PLACED);
+    placesMock.mockResolvedValue(PLACES);
+  });
+  afterEach(() => {
+    notesMock.mockImplementation(async () => NOTES);
+    placesMock.mockResolvedValue([]);
+  });
+
+  test("the sheet is 'Filter': Categories, then Place with All places, each place as named, No place", async () => {
+    const tree = await renderScreen();
+    await act(async () => byLabel(tree, "Filter").props.onPress());
+    const text = allText(tree);
+    expect(text).toContain("Filter");
+    expect(text).not.toContain("Show categories");
+    expect(text.indexOf("Categories")).toBeLessThan(text.indexOf("Place"));
+    expect(placeOptions(tree).map((o) => o.props.accessibilityLabel)).toEqual([
+      "All places",
+      "Home",
+      "Uni",
+      "gym  on Dizengoff",
+      "No place",
+    ]);
+    expect(placeOptions(tree).every((o) => o.props.accessibilityRole === "radio")).toBe(true);
+    expect(placeOptions(tree).map((o) => o.props.accessibilityState.checked)).toEqual([true, false, false, false, false]);
+  });
+
+  test("picking a place shows only its notes; the badge counts it", async () => {
+    const tree = await renderScreen();
+    await pickPlace(tree, "Uni");
+    expect(shownNotes(tree)).toEqual(["Study for the exam"]);
+    expect(badge(tree).props.children).toBe(1);
+    expect(byLabel(tree, "Filter").props.accessibilityValue).toEqual({ text: "1 active" });
+    await pickPlace(tree, "Home");
+    expect(shownNotes(tree)).toEqual([]);
+  });
+
+  test("No place: notes without a place and with a deleted one", async () => {
+    const tree = await renderScreen();
+    await pickPlace(tree, "No place");
+    expect(shownNotes(tree).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
+  });
+
+  test("combines with the categories and the folder; the badge counts both", async () => {
+    const tree = await renderScreen();
+    await pickPlace(tree, "No place");
+    await checkCategories(tree, "Errand");
+    expect(shownNotes(tree).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
+    expect(badge(tree).props.children).toBe(2);
+    await pressTab(tree, "Uni");
+    expect(shownNotes(tree)).toEqual(["לקנות חלב"]);
+  });
+
+  test("Clear resets the categories and the place", async () => {
+    const tree = await renderScreen();
+    await checkCategories(tree, "Errand");
+    await pickPlace(tree, "Uni");
+    await act(async () => byLabel(tree, "Filter").props.onPress());
+    await act(async () => byLabel(tree, "Clear").props.onPress());
+    expect(placeOptions(tree)[0].props.accessibilityState.checked).toBe(true);
+    await act(async () => byLabel(tree, "Done").props.onPress());
+    expect(shownNotes(tree)).toHaveLength(3);
+    expect(badge(tree)).toBeUndefined();
+  });
+
+  test("'Clear search and filter' also resets the place", async () => {
+    const tree = await renderScreen();
+    await pickPlace(tree, "Home");
+    expect(allText(tree)).toContain("No matching notes");
+    await act(async () => byLabel(tree, "Clear search and filter").props.onPress());
+    expect(shownNotes(tree)).toHaveLength(3);
+  });
+
+  test("the place is remembered; a place that's gone falls back to All places", async () => {
+    const first = await renderScreen();
+    await pickPlace(first, "Uni");
+    await act(async () => first.unmount());
+    const again = await renderScreen();
+    expect(shownNotes(again)).toEqual(["Study for the exam"]);
+    await act(async () => again.unmount());
+    placesMock.mockResolvedValue(PLACES.filter((p) => p.id !== "p-uni"));
+    const after = await renderScreen();
+    expect(shownNotes(after)).toHaveLength(3);
+    expect(badge(after)).toBeUndefined();
   });
 });
 
