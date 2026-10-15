@@ -1,4 +1,4 @@
-import { arrivalCandidates, hasSpecificTime } from "./arrivalNotes";
+import { arrivalCandidates, hasSpecificTime, isAboutArriving } from "./arrivalNotes";
 import { Note } from "../types/notes";
 
 let n = 0;
@@ -47,6 +47,30 @@ describe("hasSpecificTime", () => {
     test("an explicit time the user set", () => {
       expect(hasSpecificTime(note({ remind_time_explicit: true, remind_at_hour: 8 }))).toBe(true);
     });
+  });
+});
+
+describe("isAboutArriving (same phrases as the server)", () => {
+  test("needs a time word first", () => {
+    for (const content of [
+      "get back to the client tomorrow",
+      "need to get to the report",
+      "I get to choose the venue",
+      "dad's flight arrives friday, pick him up",
+    ]) {
+      expect([content, isAboutArriving(note({ content }))]).toEqual([content, false]);
+    }
+  });
+
+  test("arrival phrases", () => {
+    for (const content of [
+      "when I get home call mom",
+      "once I'm at the office print the form",
+      "as soon as I arrive email Dana",
+      "on arrival check in",
+    ]) {
+      expect([content, isAboutArriving(note({ content }))]).toEqual([content, true]);
+    }
   });
 });
 

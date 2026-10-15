@@ -43,6 +43,30 @@ def test_arrival_phrases():
         assert not is_about_arriving(text), text
 
 
+def test_arrival_needs_a_time_word_first():
+    # "get back to ..." or "arrives" alone is an ordinary to-do
+    for text in [
+        "get back to the client tomorrow",
+        "need to get to the report",
+        "I get to choose the venue",
+        "dad's flight arrives friday, pick him up",
+    ]:
+        assert not is_about_arriving(text), text
+    for text in [
+        "when I get home call mom",
+        "once I'm at the office print the form",
+        "as soon as I arrive email Dana",
+        "on arrival check in",
+    ]:
+        assert is_about_arriving(text), text
+
+
+def test_get_back_to_someone_keeps_a_reminder_time():
+    note = _enrich("get back to the client tomorrow")
+    assert reminder_time_source(note) is not None
+    assert any(len(c) == 5 and c[2] == ":" for c in note.contexts)
+
+
 def test_get_home_has_no_guessed_time():
     note = _enrich("when I get home, do the laundry")
     assert note.contexts == ["p-home"]

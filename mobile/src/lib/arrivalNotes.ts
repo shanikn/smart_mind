@@ -7,8 +7,10 @@ import { canAlert } from "./alertRules";
 
 export const MAX_ARRIVAL_NOTES = 3;
 
+// Same phrases as the server's _arrival_english (agents/categorizer.py): a
+// time word comes first, so "get back to the client" is an ordinary to-do.
 const ARRIVAL_WORDS =
-  /\b(arriv\w*|on arrival|when i (get|reach|come)\b|get(ting)? (home|there|back|to)\b|when i'?m (at|home|there|back)|when i am (at|home|there|back)|once i'?m|once i am|once i (get|reach))/i;
+  /\b(on arrival|(when|once|after|as soon as) i (get|reach|come|arrive)\b|(when|once) i'?m (at|home|there|back)\b|(when|once) i am (at|home|there|back)\b)/i;
 
 // fallback for an older backend that doesn't send reminder_time_source
 const TIME_IN_TEXT = /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s?(am|pm)\b|\b(morning|noon|afternoon|evening|tonight|night)\b/i;

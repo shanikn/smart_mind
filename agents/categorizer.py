@@ -299,10 +299,13 @@ def infer_date(content: str, now: Optional[datetime] = None) -> Optional[str]:
 # Same phrases as the phone's isAboutArriving (mobile/src/lib/arrivalNotes.ts),
 # plus Hebrew: "כשאגיע", "כשאני מגיעה", "כשאחזור", "ברגע שאהיה"...
 
+# Like the Hebrew, a time word comes first: "get back to the client" or
+# "the flight arrives friday" alone are ordinary to-dos.
 _arrival_english = re.compile(
-    r"\b(arriv\w*|on arrival|when i (get|reach|come)\b|get(ting)? (home|there|back|to)\b"
-    r"|when i'?m (at|home|there|back)|when i am (at|home|there|back)"
-    r"|once i'?m|once i am|once i (get|reach))"
+    r"\b(on arrival"
+    r"|(when|once|after|as soon as) i (get|reach|come|arrive)\b"
+    r"|(when|once) i'?m (at|home|there|back)\b"
+    r"|(when|once) i am (at|home|there|back)\b)"
 )
 # כש / ברגע ש / אחרי ש, maybe אני, then a verb of arriving or being there:
 # אגיע מגיע(ה) נגיע, אחזור חוזר(ת) נחזור, אהיה נהיה
