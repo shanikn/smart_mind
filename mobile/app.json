@@ -52,8 +52,8 @@
         {
           "isAndroidBackgroundLocationEnabled": true,
           "isIosBackgroundLocationEnabled": true,
-          "locationWhenInUsePermission": "Smart Mind uses your location to show the right notes when you arrive at your saved places.",
-          "locationAlwaysAndWhenInUsePermission": "Smart Mind uses your location to show the right notes when you arrive at your saved places.",
+          "locationWhenInUsePermission": "Smart Mind uses your location to remind you about notes when you arrive at your saved places or pass near a store for an errand, and to save a place where you are now.",
+          "locationAlwaysAndWhenInUsePermission": "Smart Mind uses your location to remind you about notes when you arrive at your saved places or pass near a store for an errand, even when the app is closed.",
           "isAndroidForegroundServiceEnabled": false
         }
       ],
