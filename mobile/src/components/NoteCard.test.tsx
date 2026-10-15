@@ -112,23 +112,26 @@ describe("the alert time on the right", () => {
   });
 
   test("a time the user set for a later day shows the date, plain, and says it", async () => {
-    const later = new Date();
-    later.setDate(later.getDate() + 9);
-    const short = `${later.getDate()} ${later.toLocaleString("en-GB", { month: "short" })}`;
-    const set = {
-      ...NOTE,
-      remind_time_explicit: true,
-      remind_at_hour: 9,
-      remind_at_minute: 25,
-      remind_on_date: dayIn(9),
-    } as Note;
-    const tree = await renderCard(jest.fn(), set);
-    const time = timeText(tree, `${short} 09:25`)!;
-    expect(time).toBeDefined();
-    expect(StyleSheet.flatten(time.props.style).color).toBe(lightColors.text);
-    expect(sparkles(tree)).toHaveLength(0);
-    const long = later.toLocaleString("en-GB", { month: "long" });
-    expect(labelled(tree, `Alert on ${later.getDate()} ${long} at 09:25`).length).toBeGreaterThan(0);
+    // a fixed "now" (the card has no now prop, so the clock is set): 9 days
+    // later is in September, which en-GB shortens to "Sept"; the card says "Sep"
+    jest.useFakeTimers({ now: new Date(2026, 8, 15, 12, 0), doNotFake: ["queueMicrotask", "nextTick", "setImmediate"] });
+    try {
+      const set = {
+        ...NOTE,
+        remind_time_explicit: true,
+        remind_at_hour: 9,
+        remind_at_minute: 25,
+        remind_on_date: "2026-09-24",
+      } as Note;
+      const tree = await renderCard(jest.fn(), set);
+      const time = timeText(tree, "24 Sep 09:25")!;
+      expect(time).toBeDefined();
+      expect(StyleSheet.flatten(time.props.style).color).toBe(lightColors.text);
+      expect(sparkles(tree)).toHaveLength(0);
+      expect(labelled(tree, "Alert on 24 September at 09:25").length).toBeGreaterThan(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("a Smart time today shows just the time", async () => {
