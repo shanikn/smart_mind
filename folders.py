@@ -11,11 +11,14 @@ time the user's folders are listed or changed.
 import re
 from uuid import uuid4
 
+from pymongo.errors import DuplicateKeyError
+
 from notepad import db, notes_collection
 
 folders_collection = db["folders"]
 
 GENERAL = "General"
+FOLDER_KEY_INDEX = "user_id_key_unique"
 MAX_NAME = 50
 _RESERVED = {"general", "all"}
 
@@ -29,8 +32,30 @@ class FolderError(ValueError):
 
 
 def ensure_folder_indexes():
-    """Idempotent: folders are always looked up by owner."""
+    """Idempotent: folders are always looked up by owner, and each user has
+    one folder per key (name in lower case), even when two requests race.
+    Duplicates stored before the unique index existed are removed first,
+    keeping the one listed first."""
     folders_collection.create_index("user_id")
+    _remove_duplicate_folders()
+    folders_collection.create_index(
+        [("user_id", 1), ("key", 1)],
+        name=FOLDER_KEY_INDEX,
+        unique=True,
+        partialFilterExpression={"key": {"$type": "string"}},
+    )
+
+
+def _remove_duplicate_folders():
+    groups = folders_collection.aggregate([
+        {"$match": {"key": {"$type": "string"}}},
+        {"$group": {"_id": {"user_id": "$user_id", "key": "$key"}, "count": {"$sum": 1}}},
+        {"$match": {"count": {"$gt": 1}}},
+    ])
+    for group in groups:
+        docs = list(folders_collection.find(group["_id"], {"name": 1, "order": 1}))
+        docs.sort(key=lambda d: ("order" not in d, d.get("order", 0), d["name"]))
+        folders_collection.delete_many({"_id": {"$in": [d["_id"] for d in docs[1:]]}})
 
 
 def clean_name(name: str) -> str:
@@ -67,20 +92,25 @@ def _number_folders(user_id: str, docs: list):
             doc["order"] = i
 
 
-def _insert(user_id: str, name: str):
+def _insert(user_id: str, name: str) -> bool:
+    """Store the folder at the end. False if it already exists (another
+    request stored it after our _exists check)."""
     docs = _sorted_docs(user_id)
     _number_folders(user_id, docs)
-    folders_collection.insert_one(
-        {"_id": str(uuid4()), "user_id": user_id, "name": name, "key": name.lower(), "order": len(docs)}
-    )
+    try:
+        folders_collection.insert_one(
+            {"_id": str(uuid4()), "user_id": user_id, "name": name, "key": name.lower(), "order": len(docs)}
+        )
+    except DuplicateKeyError:
+        return False
+    return True
 
 
 def create_folder(user_id: str, name: str) -> str:
     """Store a new folder. Raises FolderError (invalid, or exists with any capitals)."""
     cleaned = clean_name(name)
-    if _exists(user_id, cleaned):
+    if _exists(user_id, cleaned) or not _insert(user_id, cleaned):
         raise FolderError("exists", f'"{cleaned}" already exists')
-    _insert(user_id, cleaned)
     return cleaned
 
 
