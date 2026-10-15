@@ -245,7 +245,8 @@ export default function NotesListScreen() {
       return;
     }
 
-    if (listNames.includes(trimmed)) {
+    // with any capitals, like the server ("games" when "Games" exists)
+    if (listNames.some((name) => name.toLowerCase() === trimmed.toLowerCase())) {
       Alert.alert("Error", "That list already exists");
       return;
     }

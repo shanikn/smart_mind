@@ -109,11 +109,24 @@ function allText(tree: ReactTestRenderer): string {
     .join(" | ");
 }
 
+// Every screen a test renders is unmounted after it. A screen left mounted
+// keeps its list's timers: they fire during later tests (act() warnings,
+// "Cannot log after tests are done"), and a later wait() with fake timers
+// runs all of them, so tests got slower as the file went on and could pass
+// the 5 s timeout in a busy full run.
+const mounted: ReactTestRenderer[] = [];
+afterEach(async () => {
+  await act(async () => {
+    mounted.splice(0).forEach((tree) => tree.unmount());
+  });
+});
+
 async function renderScreen() {
   let tree!: ReactTestRenderer;
   await act(async () => {
     tree = TestRenderer.create(<NotesListScreen />);
   });
+  mounted.push(tree);
   return tree;
 }
 
@@ -463,6 +476,18 @@ describe("folder tabs and the folder sheet", () => {
     expect(store.addFolder).toHaveBeenCalledWith("Art");
     expect(tabs(tree)).toEqual(["All", "General", "Games", "Trips", "Art", "Uni"]);
     expect(selectedTab(tree)).toEqual(["Art"]);
+  });
+
+  test("a folder that exists with other capitals isn't created again", async () => {
+    const tree = await renderScreen();
+    await act(async () => byLabel(tree, "Create a new folder").props.onPress());
+    const input = tree.root.findAllByType(TextInput).find((t) => t.props.placeholder === "Folder name")!;
+    for (const name of ["games", " TRIPS ", "uni", "general"]) {
+      await act(async () => input.props.onChangeText(name));
+      await act(async () => byLabel(tree, "Create").props.onPress());
+      expect([name, lastAlert()[1]]).toEqual([name, "That list already exists"]);
+    }
+    expect(store.addFolder).not.toHaveBeenCalled();
   });
 });
 

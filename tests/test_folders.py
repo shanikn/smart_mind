@@ -95,6 +95,50 @@ def test_delete_a_folder_moves_its_notes_to_general():
     assert "Games" not in _names()
 
 
+def test_delete_moves_notes_saved_with_other_capitals_or_spaces():
+    # saved by an older app or another device, before names were cleaned
+    for note_id, name in (("fold-lower", "games"), ("fold-spaced", " Games  "), ("fold-other", "Games night")):
+        notes_collection.insert_one({"_id": note_id, "content": "x", "list_name": name, "user_id": A, "contexts": []})
+    res = client.delete("/folders/Games", headers=AS_A)
+    assert res.json()["moved"] == 2
+    assert note_doc("fold-lower")["list_name"] == "General"
+    assert note_doc("fold-spaced")["list_name"] == "General"
+    assert note_doc("fold-other")["list_name"] == "Games night"
+    assert "games" not in [n.lower() for n in _names()]
+
+
+def test_delete_matches_regex_characters_literally():
+    notes_collection.insert_one({"_id": "fold-dot", "content": "x", "list_name": "a.c", "user_id": A, "contexts": []})
+    notes_collection.insert_one({"_id": "fold-abc", "content": "x", "list_name": "abc", "user_id": A, "contexts": []})
+    assert client.delete("/folders/a.c", headers=AS_A).json()["moved"] == 1
+    assert note_doc("fold-abc")["list_name"] == "abc"
+
+
+@pytest.mark.parametrize("name", ["", "   ", "All", "a/b", "x" * 51])
+def test_a_note_with_a_bad_folder_name_is_422_and_not_saved(name):
+    res = client.post("/notes/", json={"content": "x", "list_name": name}, headers=AS_A)
+    assert res.status_code == 422
+    assert notes_collection.count_documents({"user_id": A}) == 0
+    assert _names() == []
+
+
+@pytest.mark.parametrize("name", ["", "   ", "All", "a/b", "x" * 51])
+def test_moving_a_note_to_a_bad_folder_name_is_422_and_unchanged(name):
+    note_id = _note("play chess", "Games")
+    assert client.put(f"/notes/{note_id}", json={"list_name": name}, headers=AS_A).status_code == 422
+    if name:  # query parameters: older app versions ("" isn't sent)
+        assert client.put(f"/notes/{note_id}", params={"list_name": name}, headers=AS_A).status_code == 422
+    assert note_doc(note_id)["list_name"] == "Games"
+
+
+def test_note_folder_names_are_cleaned_like_folders():
+    note_id = _note("play chess", "  Board   games ")
+    assert note_doc(note_id)["list_name"] == "Board games"
+    client.put(f"/notes/{note_id}", json={"list_name": "general"}, headers=AS_A)
+    assert note_doc(note_id)["list_name"] == "General"
+    assert _names() == ["Board games"]
+
+
 def test_delete_a_folder_name_with_spaces_and_hebrew():
     client.post("/folders/", json={"name": "משחקים לילדים"}, headers=AS_A)
     assert client.delete("/folders/משחקים לילדים", headers=AS_A).json()["deleted"] is True

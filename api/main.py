@@ -32,7 +32,8 @@ import geocode  # noqa: E402
 import nearby  # noqa: E402
 import maps_links  # noqa: E402
 from folders import (  # noqa: E402
-    FolderError, create_folder, delete_folder, ensure_folder, ensure_folder_indexes, list_folders, set_folder_order,
+    FolderError, clean_note_folder, create_folder, delete_folder, ensure_folder, ensure_folder_indexes, list_folders,
+    set_folder_order,
 )
 import ratelimit  # noqa: E402
 
@@ -222,7 +223,7 @@ def create_note(
     enforce_limit(NOTE_WRITE_LIMIT, user_id, "changes")
     note = Note(
         content=request.content,
-        list_name=request.list_name,
+        list_name=_note_folder(request.list_name),
         reminders_enabled=request.reminders_enabled,
         category=request.category or "todo",
         category_explicit=request.category_explicit,
@@ -296,14 +297,25 @@ _REENRICH_FIELDS = {
 }
 
 
+def _note_folder(name) -> str:
+    """A note's folder name cleaned like a folder's, or 422 like POST /folders/."""
+    try:
+        return clean_note_folder(name)
+    except FolderError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 def _note_fields(values: dict) -> dict:
     """The MongoDB fields for the values sent (a JSON body or query
-    parameters; only the keys present). Raises 422 for a bad hour/minute."""
+    parameters; only the keys present). Raises 422 for a bad hour/minute
+    or folder name."""
     fields = {}
-    for key in ("content", "list_name", "category", "category_explicit", "location_explicit",
+    for key in ("content", "category", "category_explicit", "location_explicit",
                 "remind_date_explicit", "remind_time_explicit", "reminders_enabled"):
         if key in values:
             fields[key] = values[key]
+    if "list_name" in values:
+        fields["list_name"] = _note_folder(values["list_name"])
     if "location_value" in values:
         fields["location_value"] = values["location_value"] or None
     if "contexts" in values:

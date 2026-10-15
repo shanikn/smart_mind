@@ -8,6 +8,7 @@ Each folder has an "order" (0, 1, 2...): the user arranges them, new ones go
 at the end. Folders stored before orders existed get one, A to Z, the first
 time the user's folders are listed or changed.
 """
+import re
 from uuid import uuid4
 
 from notepad import db, notes_collection
@@ -37,6 +38,14 @@ def clean_name(name: str) -> str:
     if not cleaned or len(cleaned) > MAX_NAME or "/" in cleaned or cleaned.lower() in _RESERVED:
         raise FolderError("invalid", f"a folder name is 1-{MAX_NAME} characters, not General or All, without /")
     return cleaned
+
+
+def clean_note_folder(name: str) -> str:
+    """A note's list_name: General (any capitals), or a valid folder name,
+    cleaned. Raises FolderError like clean_name."""
+    if " ".join((name or "").split()).lower() == GENERAL.lower():
+        return GENERAL
+    return clean_name(name)
 
 
 def _exists(user_id: str, name: str) -> bool:
@@ -109,10 +118,19 @@ def set_folder_order(user_id: str, names: list) -> list:
     return [d["name"] for d in docs]
 
 
+def _same_folder(name: str) -> dict:
+    """A list_name query for this folder with any capitals and spaces, like
+    its key (notes saved by older apps may say "games" for "Games")."""
+    words = (name or "").split()
+    if not words:
+        return {"$in": []}
+    return {"$regex": r"^\s*" + r"\s+".join(re.escape(w) for w in words) + r"\s*$", "$options": "i"}
+
+
 def delete_folder(user_id: str, name: str) -> dict:
     """Delete the folder and move its notes to General. Safe to repeat."""
     moved = notes_collection.update_many(
-        {"user_id": user_id, "list_name": name}, {"$set": {"list_name": GENERAL}}
+        {"user_id": user_id, "list_name": _same_folder(name)}, {"$set": {"list_name": GENERAL}}
     ).modified_count
     deleted = folders_collection.delete_one({"user_id": user_id, "key": " ".join(name.split()).lower()}).deleted_count
     return {"deleted": deleted > 0, "moved": moved}
