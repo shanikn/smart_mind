@@ -138,3 +138,29 @@ test("listeners hear about each change, the deletion and a failure", async () =>
   deleteWithUndo(note("c"));
   expect(heard).toEqual([]);
 });
+
+test("sign-out (finishPendingDelete) still finishes when the server never answers the delete", async () => {
+  const { REQUEST_TIMEOUT_MS } = jest.requireActual("../api/client");
+  // the real delete request, over a network that hangs
+  mockDelete.mockImplementation((id: string) => jest.requireActual("../api/notes").deleteNote(id));
+  global.fetch = jest.fn(
+    (_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () =>
+          reject(Object.assign(new Error("Aborted"), { name: "AbortError" }))
+        );
+      })
+  ) as unknown as typeof fetch;
+  const heard: unknown[] = [];
+  const stop = subscribe((outcome) => outcome && heard.push(outcome));
+
+  deleteWithUndo(note("a"));
+  let finished = false;
+  finishPendingDelete().then(() => (finished = true));
+  await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+
+  expect(finished).toBe(true);
+  // the note comes back: it wasn't deleted
+  expect(heard).toEqual([{ kind: "failed", note: note("a") }]);
+  stop();
+});
