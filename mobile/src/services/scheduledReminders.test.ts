@@ -137,4 +137,39 @@ describe("syncScheduledReminders: a time + place note's alarm only while you're 
     await syncScheduledReminders();
     expect(scheduled()).toEqual(["reminder-p1"]);
   });
+
+  test("overlapping syncs: an older 'at home' sync can't re-add the alarm after a newer 'left home' one", async () => {
+    // the phone's alarms, as the mocked expo-notifications keeps them
+    const alarms = new Set<string>(["reminder-p1"]);
+    mocked.getAllScheduledNotificationsAsync.mockImplementation(
+      async () => [...alarms].map((identifier) => ({ identifier })) as never
+    );
+    mocked.cancelScheduledNotificationAsync.mockImplementation(async (id) => {
+      alarms.delete(id);
+    });
+    mocked.scheduleNotificationAsync.mockImplementation(async (request) => {
+      alarms.add(request.identifier!);
+      return request.identifier!;
+    });
+    let arriveHome!: () => void;
+    (whereAmI as jest.Mock)
+      // sync A ("arrived home") reads the place slowly...
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            arriveHome = () => resolve({ currentPlace: "id-home", trackedPlaceIds: ["id-home"] });
+          })
+      )
+      // ...sync B ("left home") quickly
+      .mockResolvedValueOnce({ currentPlace: "unknown", trackedPlaceIds: ["id-home"] });
+
+    const a = syncScheduledReminders();
+    const b = syncScheduledReminders();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // let B get as far as it can
+    arriveHome();
+    await Promise.all([a, b]);
+
+    expect([...alarms]).toEqual([]);
+    expect(await getScheduledNoteIds()).toEqual(new Set());
+  });
 });
