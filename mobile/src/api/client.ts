@@ -85,10 +85,45 @@ function authExpired() {
   }
 }
 
-export async function apiRequest(
-  path: string,
-  options: RequestInit = {}
-): Promise<any> {
+// A request (with its token-refresh retry) that takes longer fails, so a
+// hung network can't block e.g. sign-out, which waits for a pending delete.
+export const REQUEST_TIMEOUT_MS = 15000;
+
+// Thrown when a request times out. Not an ApiError: callers treat it like
+// any other network failure.
+export class RequestTimeoutError extends Error {
+  constructor(path: string) {
+    super(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000} s: ${path}`);
+    this.name = "RequestTimeoutError";
+  }
+}
+
+export async function apiRequest(path: string, options: RequestInit = {}): Promise<any> {
+  // aborts on the timeout or the caller's own signal, whichever comes first
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+  const callerSignal = options.signal;
+  const callerAborted = () => controller.abort();
+  if (callerSignal?.aborted) {
+    controller.abort();
+  } else {
+    callerSignal?.addEventListener("abort", callerAborted);
+  }
+  try {
+    return await sendRequest(path, { ...options, signal: controller.signal });
+  } catch (e) {
+    throw timedOut ? new RequestTimeoutError(path) : e;
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener("abort", callerAborted);
+  }
+}
+
+async function sendRequest(path: string, options: RequestInit): Promise<any> {
   const send = (token: string | null) => {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

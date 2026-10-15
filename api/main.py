@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import re  # noqa: E402
-from typing import Union  # noqa: E402
+from typing import Annotated, List, Union  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr  # noqa: E402
 from fastapi import Body, FastAPI, Header, HTTPException, Query  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
@@ -31,6 +31,10 @@ from auth import FirebaseDeleteError, delete_firebase_user, get_user_id  # noqa:
 import geocode  # noqa: E402
 import nearby  # noqa: E402
 import maps_links  # noqa: E402
+from folders import (  # noqa: E402
+    FolderError, clean_note_folder, create_folder, delete_folder, ensure_folder, ensure_folder_indexes, list_folders,
+    set_folder_order,
+)
 import ratelimit  # noqa: E402
 
 logging.basicConfig(
@@ -118,6 +122,7 @@ def ensure_indexes():
     try:
         ensure_note_indexes()
         ensure_place_indexes()
+        ensure_folder_indexes()
     except Exception:
         logging.exception("Creating MongoDB indexes failed")
 
@@ -178,6 +183,9 @@ NOTE_WRITE_LIMIT = ratelimit.limiter("note-write", [(60, 60)])  # create + updat
 ACCOUNT_DELETE_LIMIT = ratelimit.limiter("account-delete", [(3, 3600)])
 # adding, changing or deleting a place re-tags all the user's notes
 PLACE_WRITE_LIMIT = ratelimit.limiter("place-write", [(20, 60)])
+FOLDER_WRITE_LIMIT = ratelimit.limiter("folder-write", [(20, 60)])
+# each drag in the folder list saves the order
+FOLDER_ORDER_LIMIT = ratelimit.limiter("folder-order", [(30, 60)])
 
 
 def _limit_message(what: str, window: int) -> str:
@@ -215,7 +223,7 @@ def create_note(
     enforce_limit(NOTE_WRITE_LIMIT, user_id, "changes")
     note = Note(
         content=request.content,
-        list_name=request.list_name,
+        list_name=_note_folder(request.list_name),
         reminders_enabled=request.reminders_enabled,
         category=request.category or "todo",
         category_explicit=request.category_explicit,
@@ -229,6 +237,8 @@ def create_note(
         user_id=user_id,
     )
     save_note(note)
+    # the folder stays even after its last note moves out
+    ensure_folder(user_id, note.list_name)
     # inline, like PUT: the phone syncs alarms right after saving, so the
     # date/time and place must already be there
     enrich_note(note)
@@ -287,14 +297,25 @@ _REENRICH_FIELDS = {
 }
 
 
+def _note_folder(name) -> str:
+    """A note's folder name cleaned like a folder's, or 422 like POST /folders/."""
+    try:
+        return clean_note_folder(name)
+    except FolderError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 def _note_fields(values: dict) -> dict:
     """The MongoDB fields for the values sent (a JSON body or query
-    parameters; only the keys present). Raises 422 for a bad hour/minute."""
+    parameters; only the keys present). Raises 422 for a bad hour/minute
+    or folder name."""
     fields = {}
-    for key in ("content", "list_name", "category", "category_explicit", "location_explicit",
+    for key in ("content", "category", "category_explicit", "location_explicit",
                 "remind_date_explicit", "remind_time_explicit", "reminders_enabled"):
         if key in values:
             fields[key] = values[key]
+    if "list_name" in values:
+        fields["list_name"] = _note_folder(values["list_name"])
     if "location_value" in values:
         fields["location_value"] = values["location_value"] or None
     if "contexts" in values:
@@ -350,6 +371,8 @@ def change_note(
     matched = update_note(note_id, fields, user_id=user_id)
     if matched == 0:
         raise HTTPException(status_code=404, detail="Note not found")
+    if "list_name" in fields:
+        ensure_folder(user_id, fields["list_name"])
     # re-categorize, re-infer context, and re-embed when content changes
     if _REENRICH_FIELDS & values.keys():
         doc = get_note_by_id(note_id, user_id=user_id)
@@ -514,6 +537,50 @@ def remove_place(place_id: str, authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=404, detail="Place not found")
     untag_place(user_id, place_id)
     return {"message": "place deleted"}
+
+
+# ---- note folders: kept until the user deletes them ----
+
+class FolderRequest(BaseModel):
+    name: str = Field(..., max_length=200)
+
+
+@app.get("/folders/")
+def get_folders(authorization: Optional[str] = Header(None)):
+    """The user's folders (General is implicit) in their order, including empty ones."""
+    user_id = require_user_id(authorization)
+    return [{"name": name} for name in list_folders(user_id)]
+
+
+@app.post("/folders/")
+def add_folder(request: FolderRequest, authorization: Optional[str] = Header(None)):
+    user_id = require_user_id(authorization)
+    enforce_limit(FOLDER_WRITE_LIMIT, user_id, "folder changes")
+    try:
+        return {"name": create_folder(user_id, request.name)}
+    except FolderError as e:
+        raise HTTPException(status_code=409 if e.kind == "exists" else 422, detail=str(e))
+
+
+class FolderOrderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    names: List[Annotated[StrictStr, Field(max_length=200)]] = Field(..., max_length=500)
+
+
+@app.put("/folders/order")
+def save_folder_order(request: FolderOrderRequest, authorization: Optional[str] = Header(None)):
+    """Save the user's folder order (General stays first on the phone)."""
+    user_id = require_user_id(authorization)
+    enforce_limit(FOLDER_ORDER_LIMIT, user_id, "folder order changes")
+    return [{"name": name} for name in set_folder_order(user_id, request.names)]
+
+
+@app.delete("/folders/{name}")
+def remove_folder(name: str, authorization: Optional[str] = Header(None)):
+    """Delete the folder; its notes move to General. Safe to repeat."""
+    user_id = require_user_id(authorization)
+    enforce_limit(FOLDER_WRITE_LIMIT, user_id, "folder changes")
+    return delete_folder(user_id, name)
 
 
 # ---- account deletion (required by Google Play) ----

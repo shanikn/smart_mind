@@ -5,7 +5,10 @@ import {
   clearReminderSchedule,
   getScheduledNoteIds,
   REMINDER_CHANNEL_ID,
+  syncScheduledReminders,
 } from "./scheduledReminders";
+import { notesForAlerts, whereAmI } from "./placeState";
+import { Note } from "../types/notes";
 
 jest.mock("expo-notifications", () => ({
   SchedulableTriggerInputTypes: { DAILY: "daily", DATE: "date" },
@@ -14,7 +17,9 @@ jest.mock("expo-notifications", () => ({
   cancelScheduledNotificationAsync: jest.fn(),
   scheduleNotificationAsync: jest.fn(),
   setNotificationChannelAsync: jest.fn(),
+  getPermissionsAsync: jest.fn(),
 }));
+jest.mock("./placeState", () => ({ notesForAlerts: jest.fn(), whereAmI: jest.fn() }));
 
 const mocked = Notifications as jest.Mocked<typeof Notifications>;
 
@@ -90,4 +95,81 @@ test("clearReminderSchedule cancels reminder alarms and forgets them", async () 
   ]);
   expect(mocked.scheduleNotificationAsync).not.toHaveBeenCalled();
   expect(await getScheduledNoteIds()).toEqual(new Set());
+});
+
+describe("syncScheduledReminders: a time + place note's alarm only while you're there", () => {
+  const homeAt1754 = {
+    _id: "p1",
+    content: "remind me at home at 17:54",
+    category: "todo",
+    contexts: ["id-home", "17:54"],
+    reminders_enabled: true,
+    never_show: false,
+    cooldown_until: null,
+    remind_time_explicit: false,
+    remind_at_hour: null,
+    remind_at_minute: null,
+    remind_on_date: null,
+    reminder_time_source: "text",
+  } as unknown as Note;
+  const scheduled = () => mocked.scheduleNotificationAsync.mock.calls.map((c) => c[0].identifier);
+
+  beforeEach(() => {
+    mocked.getPermissionsAsync.mockResolvedValue({ granted: true } as never);
+    (notesForAlerts as jest.Mock).mockResolvedValue([homeAt1754]);
+  });
+
+  test("at home: scheduled", async () => {
+    (whereAmI as jest.Mock).mockResolvedValue({ currentPlace: "id-home", trackedPlaceIds: ["id-home"] });
+    await syncScheduledReminders();
+    expect(scheduled()).toEqual(["reminder-p1"]);
+  });
+
+  test("away: not scheduled (and the old alarm is cancelled)", async () => {
+    (whereAmI as jest.Mock).mockResolvedValue({ currentPlace: "unknown", trackedPlaceIds: ["id-home"] });
+    await syncScheduledReminders();
+    expect(scheduled()).toEqual([]);
+    expect(mocked.cancelScheduledNotificationAsync).toHaveBeenCalledWith("reminder-old-note");
+  });
+
+  test("location unavailable: scheduled as before", async () => {
+    (whereAmI as jest.Mock).mockResolvedValue({ currentPlace: "unknown", trackedPlaceIds: [] });
+    await syncScheduledReminders();
+    expect(scheduled()).toEqual(["reminder-p1"]);
+  });
+
+  test("overlapping syncs: an older 'at home' sync can't re-add the alarm after a newer 'left home' one", async () => {
+    // the phone's alarms, as the mocked expo-notifications keeps them
+    const alarms = new Set<string>(["reminder-p1"]);
+    mocked.getAllScheduledNotificationsAsync.mockImplementation(
+      async () => [...alarms].map((identifier) => ({ identifier })) as never
+    );
+    mocked.cancelScheduledNotificationAsync.mockImplementation(async (id) => {
+      alarms.delete(id);
+    });
+    mocked.scheduleNotificationAsync.mockImplementation(async (request) => {
+      alarms.add(request.identifier!);
+      return request.identifier!;
+    });
+    let arriveHome!: () => void;
+    (whereAmI as jest.Mock)
+      // sync A ("arrived home") reads the place slowly...
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            arriveHome = () => resolve({ currentPlace: "id-home", trackedPlaceIds: ["id-home"] });
+          })
+      )
+      // ...sync B ("left home") quickly
+      .mockResolvedValueOnce({ currentPlace: "unknown", trackedPlaceIds: ["id-home"] });
+
+    const a = syncScheduledReminders();
+    const b = syncScheduledReminders();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // let B get as far as it can
+    arriveHome();
+    await Promise.all([a, b]);
+
+    expect([...alarms]).toEqual([]);
+    expect(await getScheduledNoteIds()).toEqual(new Set());
+  });
 });

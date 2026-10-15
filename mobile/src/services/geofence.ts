@@ -23,6 +23,7 @@ import {
 import { getGrantedPermissions } from "./locationPermissions";
 import { checkAndNotifyReminders } from "./reminderNotifier";
 import { getStoreRegions, handleStoreGeofenceEvent } from "./storeAlerts";
+import { onPlaceGeofenceEvent } from "./placeTimeReminders";
 
 import {
   GEOFENCE_REGIONS_KEY as REGISTERED_REGIONS_KEY,
@@ -93,9 +94,15 @@ TaskManager.defineTask<{
     // the ENTER Android fires right after (re-)registering, for a place
     // you're already at, updates the place above but isn't an arrival
     const notify = arrived && shouldNotifyArrival(event, Date.now(), await getRegisteredAt());
-    if (notify && (await ensureAuthToken())) {
+    const signedIn = await ensureAuthToken();
+    if (notify && signedIn) {
       // per-slot de-dupe in checkAndNotifyReminders stops re-entry spam
       await checkAndNotifyReminders({ onArrival: true });
+    }
+    // a saved place: notes with a time and this place (missed while away?
+    // alert now) and their alarms, re-planned for being here or not
+    if (signedIn && knownPlaceIds.has(regionId)) {
+      await onPlaceGeofenceEvent(event, regionId, notify);
     }
   } catch (e) {
     console.log("Geofence task failed", e);

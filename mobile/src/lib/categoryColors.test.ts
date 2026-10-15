@@ -161,3 +161,30 @@ describe("the four kinds", () => {
     expect((await getCategoryColors()).todo).toBe("#666666");
   });
 });
+
+describe("readableOn", () => {
+  const { readableOn, hueOf } = jest.requireActual("./categoryColors");
+
+  test("a color that's already readable is kept as is", () => {
+    expect(readableOn("#1976D2", "#FFFFFF")).toBe("#1976D2");
+  });
+
+  test("too light on white: darkened just enough, same hue", () => {
+    const shade = readableOn("#388E3C", "#FFFFFF");
+    expect(contrastRatio(shade, "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(shade, "#FFFFFF")).toBeLessThan(5);
+    expect(Math.abs(hueOf(shade) - hueOf("#388E3C"))).toBeLessThanOrEqual(2);
+  });
+
+  test("too dark on a dark card: lightened, same hue", () => {
+    const shade = readableOn("#7B1FA2", "#182019");
+    expect(contrastRatio(shade, "#182019")).toBeGreaterThanOrEqual(4.5);
+    expect(Math.abs(hueOf(shade) - hueOf("#7B1FA2"))).toBeLessThanOrEqual(2);
+  });
+
+  test("hueOf: red 0, green 120, blue 240", () => {
+    expect(hueOf("#FF0000")).toBeCloseTo(0);
+    expect(hueOf("#00FF00")).toBeCloseTo(120);
+    expect(hueOf("#0000FF")).toBeCloseTo(240);
+  });
+});

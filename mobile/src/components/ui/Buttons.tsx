@@ -56,12 +56,14 @@ export function TextButton({
   disabled = false,
   destructive = false,
   style,
+  accessibilityLabel,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   destructive?: boolean;
   style?: StyleProp<ViewStyle>;
+  accessibilityLabel?: string; // when the visible label needs more context
 }) {
   const { colors, type } = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -72,7 +74,7 @@ export function TextButton({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
     >
       <Text style={[styles.textLabel, destructive && styles.destructive]}>{label}</Text>
     </TouchableOpacity>

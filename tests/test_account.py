@@ -86,7 +86,7 @@ def test_idempotent(firebase_calls):
     assert client.delete("/account", headers=AS_A).status_code == 200
     again = client.delete("/account", headers=AS_A)
     assert again.status_code == 200
-    assert again.json()["deleted"] == {"notes": 0, "places": 0, "vectors": 0}
+    assert again.json()["deleted"] == {"notes": 0, "places": 0, "vectors": 0, "folders": 0}
 
 
 def test_firebase_failing_keeps_the_data_deleted_and_a_retry_works(firebase_calls, monkeypatch):

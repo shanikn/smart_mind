@@ -71,6 +71,49 @@ export function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+function channels(hex: string): [number, number, number] {
+  const h = normalizeHex(hex) ?? "#000000";
+  return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+}
+
+// hue in degrees (0-360), e.g. to check a shade is still "the same color"
+export function hueOf(hex: string): number {
+  const [r, g, b] = channels(hex).map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  if (d === 0) {
+    return 0;
+  }
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+
+// The color itself if it reads on the background, else the nearest shade of
+// it that does: mixed toward black on a light background, toward white on a
+// dark one. Mixing keeps the hue, so green stays green.
+export function readableOn(color: string, background: string, minContrast = 4.5): string {
+  const start = normalizeHex(color) ?? "#000000";
+  if (contrastRatio(start, background) >= minContrast) {
+    return start;
+  }
+  const target = textColorFor(background) === "#000000" ? 0 : 255;
+  const rgb = channels(start);
+  let shade = start;
+  for (let step = 1; step <= 20; step++) {
+    const t = step / 20;
+    shade =
+      "#" +
+      rgb
+        .map((v) => Math.round(v + (target - v) * t).toString(16).padStart(2, "0"))
+        .join("")
+        .toUpperCase();
+    if (contrastRatio(shade, background) >= minContrast) {
+      break;
+    }
+  }
+  return shade;
+}
+
 // black or white, whichever is more readable on the background
 export function textColorFor(background: string): "#000000" | "#FFFFFF" {
   return contrastRatio("#000000", background) >= contrastRatio("#FFFFFF", background)

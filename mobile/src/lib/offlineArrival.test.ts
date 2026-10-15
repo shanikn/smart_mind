@@ -67,3 +67,43 @@ test("best first like the server: feedback score plus a bonus when the time is n
   ];
   expect(ids(offlineReminders(notes, HOME, NOW))).toEqual(["liked", "due soon", "plain"]);
 });
+
+describe("arrival notes ('when I get home ...') and ties, like the server", () => {
+  const at = (day: number) => `2026-10-0${day}T09:00:00`; // the server's naive UTC
+
+  test("a new arrival note isn't hidden by older notes for the place", () => {
+    const notes = [
+      note("old 1", { created_at: at(1) }),
+      note("old 2", { created_at: at(2) }),
+      note("old 3", { created_at: at(3) }),
+      note("when I get home call mom", { created_at: at(4) }),
+    ];
+    expect(ids(offlineReminders(notes, HOME, NOW))).toEqual(["when I get home call mom", "old 3", "old 2"]);
+  });
+
+  test("every arrival note is kept, even past 3 (Hebrew too); others only fill up to 3", () => {
+    const notes = [
+      note("water the plants", { created_at: at(5), useful_count: 5 }),
+      note("when I get home 1", { created_at: at(1) }),
+      note("כשאגיע הביתה לתלות כביסה", { created_at: at(2) }),
+      note("once I'm home 3", { created_at: at(3) }),
+      note("as soon as I arrive 4", { created_at: at(4) }),
+    ];
+    expect(ids(offlineReminders(notes, HOME, NOW))).toEqual([
+      "as soon as I arrive 4",
+      "once I'm home 3",
+      "כשאגיע הביתה לתלות כביסה",
+      "when I get home 1",
+    ]);
+  });
+
+  test("equal scores: newest first; a higher score still wins", () => {
+    const notes = [
+      note("oldest", { created_at: at(1) }),
+      note("newest", { created_at: at(4) }),
+      note("liked", { created_at: at(2), useful_count: 1 }),
+      note("middle", { created_at: at(3) }),
+    ];
+    expect(ids(offlineReminders(notes, HOME, NOW))).toEqual(["liked", "newest", "middle"]);
+  });
+});

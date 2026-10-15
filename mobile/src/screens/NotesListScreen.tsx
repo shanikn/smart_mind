@@ -14,27 +14,31 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
-import { getNotes, deleteNote } from "../api/notes";
+import { getNotes } from "../api/notes";
 import { Note } from "../types/notes";
 import NoteCard from "../components/NoteCard";
 import { NotesStackParamList } from "../../App";
-import { addCustomList, getCustomLists, removeCustomList } from "../lib/listPrefs";
-import { ALL, GENERAL, folderTabs } from "../lib/folderOrder";
+import { addFolder, loadFolders, removeFolder, reorderFolders } from "../services/foldersStore";
+import { ALL, GENERAL, folderNames, folderTabs } from "../lib/folderOrder";
+import {
+  getCategorySelection,
+  getFolderTab,
+  getPlaceSelection,
+  setCategorySelection,
+  setFolderTab,
+  setPlaceSelection,
+} from "../lib/notesListSelection";
+import FolderEditSheet from "../components/FolderEditSheet";
+import CategoryFilterSheet from "../components/CategoryFilterSheet";
+import UndoBar from "../components/UndoBar";
+import { deleteWithUndo, hiddenNoteIds, pendingNote, subscribe, undoDelete } from "../services/pendingDelete";
 import { getNotesView, NotesView, notesViewSections, setNotesView } from "../lib/notesView";
 import { currentPlaceLabel } from "../lib/noteCardInfo";
 import { getReminderLocation } from "../lib/reminderPrefs";
-import { syncScheduledReminders } from "../services/scheduledReminders";
-import { syncStoreAlerts } from "../services/storeAlerts";
 import { loadPlaces } from "../services/placesStore";
 import { ServerPlace } from "../lib/userPlaces";
-import {
-  CATEGORIES,
-  categoryLabel,
-  CategoryColors,
-  DEFAULT_CATEGORY_COLORS,
-  getCategoryColors,
-} from "../lib/categoryColors";
-import { ALL_CATEGORIES, filterNotes, hasActiveFilters } from "../lib/noteFilter";
+import { Category, CategoryColors, DEFAULT_CATEGORY_COLORS, getCategoryColors } from "../lib/categoryColors";
+import { ANY_PLACE, filterNotes, hasActiveFilters, NO_PLACE } from "../lib/noteFilter";
 import { Chip, ChipRow, SectionLabel, TextButton } from "../components/ui";
 import { MIN_TOUCH_TARGET, Theme, fonts, radius, spacing } from "../theme";
 import { useTheme, useThemedStyles } from "../ThemeContext";
@@ -58,13 +62,37 @@ export default function NotesListScreen() {
   const [loadFailed, setLoadFailed] = useState(false);
   // focus refetches can overlap: only the newest one may update the screen
   const latestFetch = useRef(0);
-  const [activeTab, setActiveTab] = useState(ALL);
+  // the folder tab, the checked categories and the picked place; remembered while the app is open
+  const [activeTab, setActiveTab] = useState<string>(getFolderTab);
+  const [checkedCategories, setCheckedCategories] = useState<string[]>(getCategorySelection);
+  const [pickedPlace, setPickedPlace] = useState<string>(getPlaceSelection);
+  const [showFolderEditor, setShowFolderEditor] = useState(false);
+  const [showCategoryFilter, setShowCategoryFilter] = useState(false);
   const [customLists, setCustomLists] = useState<string[]>([]);
   const [showCreateListModal, setShowCreateListModal] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES);
   const [view, setView] = useState<NotesView>("recent");
+  // a deleted note is hidden while its Undo bar shows (services/pendingDelete.ts)
+  const [hiddenIds, setHiddenIds] = useState<string[]>(hiddenNoteIds);
+  const [undoNote, setUndoNote] = useState<Note | null>(pendingNote);
+
+  useEffect(
+    () =>
+      subscribe((outcome) => {
+        setHiddenIds(hiddenNoteIds());
+        setUndoNote(pendingNote());
+        if (outcome?.kind === "deleted") {
+          setNotes((prev) => prev.filter((n) => n._id !== outcome.id));
+        } else if (outcome?.kind === "failed") {
+          Alert.alert("Couldn't delete the note", "Check your connection and try again.");
+        }
+      }),
+    []
+  );
+
+  // hiding (not removing) keeps the note's place for Undo
+  const visibleNotes = useMemo(() => notes.filter((n) => !hiddenIds.includes(n._id)), [notes, hiddenIds]);
 
   useEffect(() => {
     getNotesView().then(setView);
@@ -75,19 +103,58 @@ export default function NotesListScreen() {
     setNotesView(next);
   };
 
-  // All, then General, then the other folders alphabetically (no re-sorting here)
-  const listNames = useMemo(() => folderTabs(notes, customLists), [notes, customLists]);
+  // General, then the user's folder order, empty folders included
+  const listNames = useMemo(() => folderNames(notes, customLists), [notes, customLists]);
+  // the tabs: All in front of them
+  const tabNames = useMemo(() => folderTabs(notes, customLists), [notes, customLists]);
 
-  // folder tab + category chip + search, combined (lib/noteFilter.ts)
-  const filters = { folder: activeTab, category: categoryFilter, query };
+  // a tab whose folder no longer exists (deleted elsewhere) shows All
+  const folder = tabNames.includes(activeTab) ? activeTab : ALL;
+
+  const chooseTab = (name: string) => {
+    setActiveTab(name);
+    setFolderTab(name);
+  };
+
+  const chooseCategories = (names: string[]) => {
+    setCheckedCategories(names);
+    setCategorySelection(names);
+  };
+
+  const toggleCategory = (category: Category) =>
+    chooseCategories(
+      checkedCategories.includes(category)
+        ? checkedCategories.filter((c) => c !== category)
+        : [...checkedCategories, category]
+    );
+
+  const choosePlace = (value: string) => {
+    setPickedPlace(value);
+    setPlaceSelection(value);
+  };
+
+  const placeIds = useMemo(() => places.map((p) => p.id), [places]);
+  // a remembered place that no longer exists shows All places
+  const place =
+    pickedPlace === ANY_PLACE || pickedPlace === NO_PLACE || placeIds.includes(pickedPlace) ? pickedPlace : ANY_PLACE;
+
+  // folder tab AND one of the checked categories AND the place AND the search (lib/noteFilter.ts)
+  const filters = { folder, categories: checkedCategories, query, place };
   const filteredNotes = useMemo(
-    () => filterNotes(notes, { folder: activeTab, category: categoryFilter, query }),
-    [notes, activeTab, categoryFilter, query]
+    () => filterNotes(visibleNotes, { folder, categories: checkedCategories, query, place }, placeIds),
+    [visibleNotes, folder, checkedCategories, query, place, placeIds]
   );
+  // the badge: checked categories, plus one for a place
+  const activeFilterCount = checkedCategories.length + (place === ANY_PLACE ? 0 : 1);
+
+  const clearFilter = () => {
+    chooseCategories([]);
+    choosePlace(ANY_PLACE);
+  };
 
   const clearSearchAndFilter = () => {
     setQuery("");
-    setCategoryFilter(ALL_CATEGORIES);
+    clearFilter();
   };
 
   // Recent: one list, newest first; Upcoming: the date sections
@@ -102,7 +169,7 @@ export default function NotesListScreen() {
     try {
       const [data, savedLists, userPlaces, colorsByCategory, location] = await Promise.all([
         getNotes(),
-        getCustomLists().catch(() => null),
+        loadFolders().catch(() => null),
         loadPlaces().catch(() => []),
         getCategoryColors().catch(() => DEFAULT_CATEGORY_COLORS),
         getReminderLocation().catch(() => null),
@@ -149,42 +216,51 @@ export default function NotesListScreen() {
     fetchNotes();
   };
 
-  const handleDelete = async (noteId: string) => {
-    try {
-      await deleteNote(noteId);
-      setNotes((prev) => prev.filter((n) => n._id !== noteId));
-      syncScheduledReminders();
-      syncStoreAlerts();
-    } catch {
-      Alert.alert("Error", "Failed to delete note");
-    }
-  };
+  const handleDelete = (note: Note) => deleteWithUndo(note);
 
+  // Deleting a folder never deletes notes: they move to General (on the
+  // server). A folder with notes asks first, saying so.
   const handleDeleteFolder = (name: string) => {
-    if (name === ALL || name === GENERAL) return;
-    const listNotes = notes.filter((n) => n.list_name === name);
-    Alert.alert("Delete List", `Delete "${name}" and its ${listNotes.length} note(s)?`, [
+    if (name === GENERAL) return;
+    const count = notes.filter((n) => n.list_name === name).length;
+    const message =
+      count === 0
+        ? `Delete the folder "${name}"?`
+        : `"${name}" has ${count} ${count === 1 ? "note" : "notes"}. Delete the folder and move ${
+            count === 1 ? "it" : "them"
+          } to General?`;
+    Alert.alert("Delete folder", message, [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Delete",
+        text: "Delete folder",
         style: "destructive",
         onPress: async () => {
           try {
-            await Promise.all(listNotes.map((n) => deleteNote(n._id)));
-            setNotes((prev) => prev.filter((n) => n.list_name !== name));
-            syncScheduledReminders();
-            syncStoreAlerts();
-            if (listNotes.length === 0) {
-              const nextLists = await removeCustomList(name);
-              setCustomLists(nextLists);
+            const { folders } = await removeFolder(name);
+            setCustomLists(folders);
+            setNotes((prev) => prev.map((n) => (n.list_name === name ? { ...n, list_name: GENERAL } : n)));
+            if (getFolderTab() === name) {
+              chooseTab(ALL);
             }
-            setActiveTab(ALL);
           } catch {
-            Alert.alert("Error", "Failed to delete list");
+            Alert.alert("Couldn't delete the folder", "Check your connection and try again.");
           }
         },
       },
     ]);
+  };
+
+  // the folders under General, in the order just dragged; shown at once,
+  // put back if the server can't save it
+  const handleReorderFolders = async (names: string[]) => {
+    const previous = customLists;
+    setCustomLists(names);
+    try {
+      setCustomLists(await reorderFolders(names));
+    } catch {
+      setCustomLists(previous);
+      Alert.alert("Couldn't save the folder order", "Check your connection and try again.");
+    }
   };
 
   const handleCreateList = async () => {
@@ -194,15 +270,16 @@ export default function NotesListScreen() {
       return;
     }
 
-    if (listNames.includes(trimmed)) {
+    // with any capitals, like the server ("games" when "Games" exists)
+    if (listNames.some((name) => name.toLowerCase() === trimmed.toLowerCase())) {
       Alert.alert("Error", "That list already exists");
       return;
     }
 
     try {
-      const nextLists = await addCustomList(trimmed);
+      const nextLists = await addFolder(trimmed);
       setCustomLists(nextLists);
-      setActiveTab(trimmed);
+      chooseTab(trimmed);
       setNewListName("");
       setShowCreateListModal(false);
     } catch {
@@ -229,17 +306,9 @@ export default function NotesListScreen() {
             {placeLabel}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowCreateListModal(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Create a new folder"
-        >
-          <Ionicons name="folder-outline" size={22} color={colors.text} />
-        </TouchableOpacity>
       </View>
 
-      {notes.length > 0 && (
+      {visibleNotes.length > 0 && (
         <View style={styles.viewToggle} accessibilityRole="tablist">
           {(
             [
@@ -264,7 +333,7 @@ export default function NotesListScreen() {
         </View>
       )}
 
-      {notes.length > 0 && (
+      {visibleNotes.length > 0 && (
         <View style={styles.searchWrap}>
           <View style={styles.search}>
             <Ionicons name="search-outline" size={18} color={colors.textMuted} />
@@ -289,6 +358,22 @@ export default function NotesListScreen() {
               </TouchableOpacity>
             )}
           </View>
+          <TouchableOpacity
+            style={[styles.filterButton, activeFilterCount > 0 && styles.filterButtonActive]}
+            onPress={() => setShowCategoryFilter(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Filter"
+            accessibilityValue={activeFilterCount > 0 ? { text: `${activeFilterCount} active` } : undefined}
+          >
+            <Ionicons name="filter" size={22} color={activeFilterCount > 0 ? colors.primaryDark : colors.text} />
+            {activeFilterCount > 0 && (
+              <View style={styles.badge}>
+                <Text testID="filter-count" style={styles.badgeText}>
+                  {activeFilterCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
       )}
 
@@ -298,49 +383,49 @@ export default function NotesListScreen() {
         </View>
       ) : (
         <>
-          {notes.length > 0 && (
-            <View style={styles.chips}>
+          {/* the folder tabs; long-press a tab, or the edit icon, to reorder or delete folders */}
+          <View style={styles.tabsRow} testID="folder-tabs-row">
+            {/* the tabs scroll in the space the two icons leave */}
+            <View style={styles.tabsScroll}>
               <ChipRow scroll style={styles.chipsContent}>
-                {listNames.map((name) => (
+                {tabNames.map((name) => (
                   <Chip
                     key={name}
                     label={name}
-                    selected={activeTab === name}
-                    onPress={() => setActiveTab(name)}
-                    onLongPress={() => handleDeleteFolder(name)}
-                  />
-                ))}
-              </ChipRow>
-              <ChipRow scroll style={[styles.chipsContent, styles.categoryChips]}>
-                <Chip
-                  label="All"
-                  icon="pricetags-outline"
-                  selected={categoryFilter === ALL_CATEGORIES}
-                  onPress={() => setCategoryFilter(ALL_CATEGORIES)}
-                  accessibilityLabel="All categories"
-                />
-                {CATEGORIES.map((category) => (
-                  <Chip
-                    key={category}
-                    label={categoryLabel(category)}
-                    dotColor={categoryColors[category]}
-                    selected={categoryFilter === category}
-                    onPress={() => setCategoryFilter(categoryFilter === category ? ALL_CATEGORIES : category)}
-                    accessibilityLabel={`${categoryLabel(category)} notes`}
+                    testID="folder-tab"
+                    selected={folder === name}
+                    onPress={() => chooseTab(name)}
+                    onLongPress={() => setShowFolderEditor(true)}
                   />
                 ))}
               </ChipRow>
             </View>
-          )}
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => setShowCreateListModal(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Create a new folder"
+            >
+              <Ionicons name="folder-outline" size={22} color={colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => setShowFolderEditor(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit folders"
+            >
+              <Ionicons name="create-outline" size={22} color={colors.text} />
+            </TouchableOpacity>
+          </View>
 
-          {notes.length === 0 && loadFailed ? (
+          {visibleNotes.length === 0 && loadFailed && !undoNote ? (
             <View style={styles.center}>
               <Ionicons name="cloud-offline-outline" size={56} color={colors.border} />
               <Text style={[type.cardTitle, styles.emptyText]}>Couldn't load your notes</Text>
               <Text style={type.caption}>Check your connection and try again</Text>
               <TextButton label="Try again" onPress={handleRetry} />
             </View>
-          ) : notes.length === 0 ? (
+          ) : visibleNotes.length === 0 ? (
             <View style={styles.center}>
               <Ionicons name="document-text-outline" size={64} color={colors.border} />
               <Text style={[type.cardTitle, styles.emptyText]}>No notes yet</Text>
@@ -368,7 +453,7 @@ export default function NotesListScreen() {
                 <NoteCard
                   note={item}
                   onPress={() => navigation.navigate("AddEditNote", { note: item })}
-                  onDelete={() => handleDelete(item._id)}
+                  onDelete={() => handleDelete(item)}
                   places={places}
                   categoryColors={categoryColors}
                 />
@@ -382,6 +467,26 @@ export default function NotesListScreen() {
         </>
       )}
 
+      <FolderEditSheet
+        visible={showFolderEditor}
+        folders={listNames}
+        onDelete={handleDeleteFolder}
+        onReorder={handleReorderFolders}
+        onClose={() => setShowFolderEditor(false)}
+      />
+
+      <CategoryFilterSheet
+        visible={showCategoryFilter}
+        colors={categoryColors}
+        checked={checkedCategories}
+        onToggle={toggleCategory}
+        places={places}
+        place={place}
+        onPickPlace={choosePlace}
+        onClear={clearFilter}
+        onClose={() => setShowCategoryFilter(false)}
+      />
+
       <Modal
         visible={showCreateListModal}
         animationType="fade"
@@ -390,20 +495,30 @@ export default function NotesListScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={[type.cardTitle, styles.modalTitle]}>Create New List</Text>
+            <Text style={[type.cardTitle, styles.modalTitle]}>Create New Folder</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="List name"
+              placeholder="Folder name"
               placeholderTextColor={colors.textMuted}
               value={newListName}
               onChangeText={setNewListName}
               autoFocus
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalAction} onPress={() => setShowCreateListModal(false)}>
+              <TouchableOpacity
+                style={styles.modalAction}
+                onPress={() => setShowCreateListModal(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+              >
                 <Text style={styles.modalActionSecondary}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalAction} onPress={handleCreateList}>
+              <TouchableOpacity
+                style={styles.modalAction}
+                onPress={handleCreateList}
+                accessibilityRole="button"
+                accessibilityLabel="Create"
+              >
                 <Text style={styles.modalActionPrimary}>Create</Text>
               </TouchableOpacity>
             </View>
@@ -411,11 +526,19 @@ export default function NotesListScreen() {
         </View>
       </Modal>
 
+      {undoNote && (
+        <UndoBar
+          message="Note deleted"
+          onUndo={undoDelete}
+          style={[styles.undoBar, { right: FAB_SIZE + FAB_MARGIN * 2 }]}
+        />
+      )}
+
       <TouchableOpacity
         style={styles.fab}
         onPress={() =>
           navigation.navigate("AddEditNote", {
-            initialListName: activeTab !== ALL ? activeTab : undefined,
+            initialListName: folder !== ALL ? folder : undefined,
           })
         }
         accessibilityRole="button"
@@ -476,10 +599,35 @@ const makeStyles = ({ colors, type }: Theme) =>
   viewOptionSelected: { backgroundColor: colors.primary },
   viewOptionText: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.primaryDark },
   viewOptionTextSelected: { color: colors.onPrimary },
-  chips: { flexGrow: 0, paddingBottom: 4 },
-  categoryChips: { paddingTop: 8 },
-  searchWrap: { paddingHorizontal: spacing.screen, paddingBottom: 10 },
+  tabsRow: { flexDirection: "row", alignItems: "center", paddingRight: 8, paddingBottom: 4 },
+  tabsScroll: { flex: 1 },
+  searchWrap: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: spacing.screen, paddingBottom: 10 },
+  filterButton: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.chip,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterButtonActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: { fontFamily: fonts.bodyBold, fontSize: 12, color: colors.onPrimary },
   search: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -506,7 +654,7 @@ const makeStyles = ({ colors, type }: Theme) =>
     alignItems: "center",
     justifyContent: "center",
   },
-  chipsContent: { paddingHorizontal: spacing.screen },
+  chipsContent: { paddingLeft: spacing.screen, paddingRight: 8 },
   center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 4 },
   emptyText: { marginTop: 12 },
   sectionLabel: { marginTop: 12, marginRight: 4, marginBottom: 0, marginLeft: 4, paddingBottom: 8 },
@@ -517,6 +665,8 @@ const makeStyles = ({ colors, type }: Theme) =>
   },
   // no section header above the first card in Recent
   recentListContent: { paddingTop: 12 },
+  // beside the + button, not over it
+  undoBar: { position: "absolute", left: FAB_MARGIN, bottom: FAB_MARGIN + 2 },
   fab: {
     position: "absolute",
     right: FAB_MARGIN,

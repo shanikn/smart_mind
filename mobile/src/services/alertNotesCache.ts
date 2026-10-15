@@ -8,8 +8,11 @@ import { Note } from "../types/notes";
 
 export const ALERT_NOTES_KEY = "focusedcontext.alertNotes";
 
-// errand text and store data kept by the store alerts (services/storeAlerts.ts)
+// the user's folder names (services/foldersStore.ts; the old phone-only list),
+// and errand text and store data kept by the store alerts (services/storeAlerts.ts)
 const STORE_ALERT_DATA_KEYS = [
+  "focusedcontext.folders",
+  "focusedcontext.customLists",
   "smartmind.storeAlerts.errands",
   "smartmind.storeAlerts.cache",
   "smartmind.storeAlerts.regions",
@@ -17,6 +20,9 @@ const STORE_ALERT_DATA_KEYS = [
   "smartmind.storeAlerts.names",
   "smartmind.storeAlerts.visits",
   "smartmind.storeAlerts.pending",
+  // when you left each place, and which missed time + place notes were alerted (placeTimeReminders.ts)
+  "focusedcontext.placeExits",
+  "focusedcontext.placeTimeAlerted",
 ];
 
 interface Saved {
@@ -44,6 +50,7 @@ function slim(n: Note): Note {
     store_type: n.store_type ?? null,
     useful_count: n.useful_count ?? 0,
     dismissed_count: n.dismissed_count ?? 0,
+    created_at: n.created_at, // offline ranking: newest first on equal scores
   } as Note;
 }
 

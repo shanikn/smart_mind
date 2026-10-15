@@ -14,6 +14,8 @@ import { arrivalCandidates } from "../lib/arrivalNotes";
 import { offlineReminders } from "../lib/offlineArrival";
 import { currentUserId } from "../api/client";
 import { readAlertNotes } from "./alertNotesCache";
+import { needsToBeThere } from "../lib/notePlace";
+import { trackedPlaceIds } from "./placeState";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -144,9 +146,14 @@ export async function checkAndNotifyReminders(
   // polling is the fallback: notes with an exact scheduled alarm are skipped
   // on the timed path so they don't notify twice
   const scheduledIds = options.onArrival ? new Set<string>() : await getScheduledNoteIds();
+  // a note with a time and a watched place only alerts at its time if you're there
+  const where = options.onArrival ? null : { currentPlace: location, trackedPlaceIds: await trackedPlaceIds() };
 
   for (const note of candidates) {
     if (!options.onArrival && !isDueNow(note, now)) {
+      continue;
+    }
+    if (where && needsToBeThere(note, where)) {
       continue;
     }
     if (scheduledIds.has(note._id)) {

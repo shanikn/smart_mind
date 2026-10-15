@@ -1,16 +1,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 
-import { getNotes } from "../api/notes";
 import { getNotificationsEnabled } from "../lib/reminderPrefs";
 import {
+  MAX_SCHEDULED_REMINDERS,
   planReminderSchedule,
   PlannedReminder,
   REMINDER_ID_PREFIX,
 } from "../lib/reminderSchedule";
+import { notesForAlerts, whereAmI } from "./placeState";
 
 // Exact local alarms for reminder times, scheduled ahead with
-// expo-notifications. Android's AlarmManager fires them with the app closed
+// expo-notifications. A note with a time and a place gets its alarm only while
+// you're at that place (lib/placeTimeReminders.ts); the geofence task re-plans
+// on every enter/exit. Android's AlarmManager fires them with the app closed
 // (exact and allowed in Doze before Android 12) and expo-notifications
 // re-schedules them after a reboot. Polling stays as the fallback for notes
 // without an exact time.
@@ -85,9 +88,20 @@ export async function getScheduledNoteIds(): Promise<Set<string>> {
   }
 }
 
-// Re-plan from the current notes. Call on app start/foreground and after a
-// note is created, edited or deleted. Never prompts for permission.
-export async function syncScheduledReminders(): Promise<void> {
+// Syncs run one at a time, in the order they were asked for: otherwise an
+// older "arrived home" sync still reading the notes could finish after a
+// newer "left home" one and put the home alarms back.
+let syncQueue: Promise<void> = Promise.resolve();
+
+// Re-plan from the current notes (the ones saved on the phone when offline).
+// Call on app start/foreground, after a note is created, edited or deleted,
+// and when you enter or leave a place. Never prompts for permission.
+export function syncScheduledReminders(): Promise<void> {
+  syncQueue = syncQueue.then(syncNow);
+  return syncQueue;
+}
+
+async function syncNow(): Promise<void> {
   try {
     const enabled = await getNotificationsEnabled();
     const permission = await Notifications.getPermissionsAsync();
@@ -95,8 +109,8 @@ export async function syncScheduledReminders(): Promise<void> {
       await clearReminderSchedule();
       return;
     }
-    const notes = await getNotes();
-    await applyReminderSchedule(planReminderSchedule(notes, new Date()));
+    const [notes, where] = await Promise.all([notesForAlerts(), whereAmI()]);
+    await applyReminderSchedule(planReminderSchedule(notes, new Date(), MAX_SCHEDULED_REMINDERS, where));
   } catch (e) {
     console.log("Scheduling reminders failed", e);
   }

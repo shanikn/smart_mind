@@ -54,6 +54,7 @@ import PasteLocationModal from "../components/PasteLocationModal";
 import DeleteAccountModal from "../components/DeleteAccountModal";
 import { deleteAccountAndSignOut } from "../services/accountDeletion";
 import { signOutCleanup } from "../services/signOutCleanup";
+import { finishPendingDelete } from "../services/pendingDelete";
 import LocationWaysSheet, { LocationWay } from "../components/LocationWaysSheet";
 import { initialMapView, MapView } from "../lib/mapPick";
 import { LatLon } from "../lib/geo";
@@ -332,13 +333,13 @@ export default function SettingsScreen() {
   // the place itself (and the notes tagged with it) stays
   const handleRemovePlace = (place: UserPlace) => {
     Alert.alert(
-      "Remove place",
-      `Remove ${place.name}'s address and radius from this phone? Arrival alerts for ${place.name} stop. ` +
+      "Clear location",
+      `Clear ${place.name}'s address and radius from this phone? Arrival alerts for ${place.name} stop. ` +
         `Your notes keep their text and stay linked to ${place.name}, and you can set a new location any time.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Remove",
+          text: "Clear",
           style: "destructive",
           onPress: async () => {
             await removePlaceCoords(place.id);
@@ -391,6 +392,8 @@ export default function SettingsScreen() {
           const usedGoogle = auth.currentUser?.providerData.some(
             (p) => p.providerId === "google.com"
           );
+          // a note delete waiting for Undo needs this user's sign-in to reach the server
+          await finishPendingDelete();
           await signOut(auth);
           // the next person on this phone mustn't get this user's geofences,
           // alarms or offline notes
@@ -646,10 +649,10 @@ export default function SettingsScreen() {
                       onPress={() => handleRemovePlace(place)}
                       disabled={locating}
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove place ${place.name}`}
+                      accessibilityLabel={`Clear location ${place.name}`}
                     >
                       <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                      <Text style={styles.removePlaceText}>Remove place</Text>
+                      <Text style={styles.removePlaceText}>Clear location</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -746,7 +749,8 @@ export default function SettingsScreen() {
         <Card>
           <Text style={type.caption}>Signed in as</Text>
           <Text style={type.body} numberOfLines={1} ellipsizeMode="tail">
-            {user?.email}
+            {/* Apple may share a relay address, or none at all */}
+            {user?.email || "your Apple ID"}
           </Text>
           <View style={styles.signOutRow}>
             <TextButton label="Sign out" destructive onPress={handleSignOut} />
@@ -784,6 +788,7 @@ export default function SettingsScreen() {
       <DeleteAccountModal
         visible={deletingAccount}
         email={user?.email ?? null}
+        confirmWithApple={user?.providerData?.some((p) => p.providerId === "apple.com") ?? false}
         onConfirm={deleteAccountAndSignOut}
         onCancel={() => setDeletingAccount(false)}
       />

@@ -164,3 +164,23 @@ def test_place_changes_20_a_minute_together(limits_on, monkeypatch):
     monkeypatch.setattr(main, "get_places", lambda user_id: [])
     assert client.get("/places/", headers=AS_A).status_code == 200
     assert client.post("/places/", json={"name": "Gym"}, headers=AS_B).status_code == 200
+
+
+def test_folder_changes_20_a_minute(limits_on, monkeypatch):
+    monkeypatch.setattr(main, "create_folder", lambda user_id, name: name)
+    monkeypatch.setattr(main, "delete_folder", lambda user_id, name: {"deleted": True, "moved": 0})
+    statuses = _hit(10, lambda: client.post("/folders/", json={"name": "Games"}, headers=AS_A))
+    statuses += _hit(10, lambda: client.delete("/folders/Games", headers=AS_A))
+    assert set(statuses) == {200}
+    res = client.post("/folders/", json={"name": "Games"}, headers=AS_A)
+    assert res.status_code == 429
+    assert res.json()["detail"]["message"] == "Too many folder changes, try again in a minute."
+
+
+def test_saving_the_folder_order_30_a_minute(limits_on, monkeypatch):
+    monkeypatch.setattr(main, "set_folder_order", lambda user_id, names: names)
+    statuses = _hit(30, lambda: client.put("/folders/order", json={"names": ["Games"]}, headers=AS_A))
+    assert set(statuses) == {200}
+    res = client.put("/folders/order", json={"names": ["Games"]}, headers=AS_A)
+    assert res.status_code == 429
+    assert res.json()["detail"]["message"] == "Too many folder order changes, try again in a minute."

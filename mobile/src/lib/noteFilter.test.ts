@@ -1,4 +1,4 @@
-import { ALL_CATEGORIES, filterNotes, hasActiveFilters, normalizeForSearch } from "./noteFilter";
+import { filterNotes, hasActiveFilters, normalizeForSearch } from "./noteFilter";
 import { Note } from "../types/notes";
 
 let n = 0;
@@ -17,7 +17,7 @@ const unknownCategory = note("something odd", { category: "weird" });
 const ALL_NOTES = [buyMilk, exam, hebrew, niqqud, idea, noFolder, unknownCategory];
 
 const ids = (notes: Note[]) => notes.map((x) => x._id);
-const all = { folder: "All", category: ALL_CATEGORIES, query: "" };
+const all = { folder: "All", categories: [] as string[], query: "", place: "all" };
 
 describe("normalizeForSearch", () => {
   test("lowercases, trims and collapses spaces", () => {
@@ -57,22 +57,33 @@ describe("filterNotes", () => {
     });
   });
 
-  describe("category", () => {
-    test("only notes in that category", () => {
-      expect(ids(filterNotes(ALL_NOTES, { ...all, category: "errand" }))).toEqual([
+  describe("categories", () => {
+    test("none checked: every category", () => {
+      expect(ids(filterNotes(ALL_NOTES, { ...all, categories: [] }))).toEqual(ids(ALL_NOTES));
+    });
+
+    test("one checked: only notes of that kind", () => {
+      expect(ids(filterNotes(ALL_NOTES, { ...all, categories: ["errand"] }))).toEqual([
         buyMilk._id,
         hebrew._id,
         niqqud._id,
       ]);
     });
 
+    test("several checked: notes of any of them, in the same order", () => {
+      expect(ids(filterNotes(ALL_NOTES, { ...all, categories: ["idea", "event"] }))).toEqual([exam._id, idea._id]);
+    });
+
     test("old and unknown categories count as To-do", () => {
-      expect(ids(filterNotes(ALL_NOTES, { ...all, category: "todo" }))).toEqual([noFolder._id, unknownCategory._id]);
-      expect(ids(filterNotes(ALL_NOTES, { ...all, category: "event" }))).toEqual([exam._id]);
+      expect(ids(filterNotes(ALL_NOTES, { ...all, categories: ["todo"] }))).toEqual([noFolder._id, unknownCategory._id]);
     });
   });
 
-  describe("folder", () => {
+  describe("folder (one tab)", () => {
+    test("All: every folder", () => {
+      expect(ids(filterNotes(ALL_NOTES, { ...all, folder: "All" }))).toEqual(ids(ALL_NOTES));
+    });
+
     test("only notes in that folder; no folder counts as General", () => {
       expect(ids(filterNotes(ALL_NOTES, { ...all, folder: "Uni" }))).toEqual([exam._id]);
       expect(ids(filterNotes(ALL_NOTES, { ...all, folder: "General" }))).toEqual([
@@ -85,21 +96,70 @@ describe("filterNotes", () => {
     });
   });
 
-  test("folder, category and search combine", () => {
-    expect(ids(filterNotes(ALL_NOTES, { folder: "Home", category: "errand", query: "חלב" }))).toEqual([
-      hebrew._id,
-    ]);
-    expect(ids(filterNotes(ALL_NOTES, { folder: "General", category: "errand", query: "milk" }))).toEqual([
+  test("the folder AND one of the checked categories AND the search", () => {
+    expect(ids(filterNotes(ALL_NOTES, { ...all, folder: "Home", categories: ["errand"], query: "חלב" }))).toEqual([hebrew._id]);
+    expect(ids(filterNotes(ALL_NOTES, { ...all, folder: "General", categories: ["errand", "idea"] }))).toEqual([
       buyMilk._id,
+      niqqud._id,
+      idea._id,
     ]);
-    expect(filterNotes(ALL_NOTES, { folder: "Uni", category: "errand", query: "" })).toEqual([]);
+    expect(filterNotes(ALL_NOTES, { ...all, folder: "Uni", categories: ["errand"] })).toEqual([]);
   });
 });
 
-test("hasActiveFilters: a search or a category (the folder is a separate tab)", () => {
+test("hasActiveFilters: a search or checked categories (the folder is its own tab)", () => {
   expect(hasActiveFilters({ ...all })).toBe(false);
   expect(hasActiveFilters({ ...all, query: "  " })).toBe(false);
   expect(hasActiveFilters({ ...all, query: "milk" })).toBe(true);
-  expect(hasActiveFilters({ ...all, category: "idea" })).toBe(true);
+  expect(hasActiveFilters({ ...all, categories: ["idea"] })).toBe(true);
   expect(hasActiveFilters({ ...all, folder: "Uni" })).toBe(false);
+});
+
+describe("place (one choice: all, none, or a place id)", () => {
+  const atHome = note("water the plants", { contexts: ["p-home"] });
+  const atGymAt6 = note("bring a towel", { category: "errand", list_name: "Uni", contexts: ["p-gym", "18:00"] });
+  const timeOnly = note("call dad", { contexts: ["18:00"] });
+  const deletedPlace = note("return the book", { category: "errand", contexts: ["p-deleted"] });
+  const PLACE_NOTES = [buyMilk, atHome, atGymAt6, timeOnly, deletedPlace];
+  const KNOWN = ["p-home", "p-gym"];
+
+  test("a place id: only notes at that place", () => {
+    expect(ids(filterNotes(PLACE_NOTES, { ...all, place: "p-home" }, KNOWN))).toEqual([atHome._id]);
+    expect(ids(filterNotes(PLACE_NOTES, { ...all, place: "p-gym" }, KNOWN))).toEqual([atGymAt6._id]);
+  });
+
+  test("none: notes with no place, and notes whose place was deleted", () => {
+    expect(ids(filterNotes(PLACE_NOTES, { ...all, place: "none" }, KNOWN))).toEqual([
+      buyMilk._id,
+      timeOnly._id,
+      deletedPlace._id,
+    ]);
+  });
+
+  test("a time-only context like 18:00 isn't a place", () => {
+    expect(ids(filterNotes(PLACE_NOTES, { ...all, place: "18:00" }, KNOWN))).toEqual([]);
+    expect(ids(filterNotes(PLACE_NOTES, { ...all, place: "none" }, KNOWN))).toContain(timeOnly._id);
+  });
+
+  test("all: changes nothing", () => {
+    expect(ids(filterNotes(PLACE_NOTES, { ...all, place: "all" }, KNOWN))).toEqual(ids(PLACE_NOTES));
+  });
+
+  test("combines with the folder, the categories and the search, keeping the order", () => {
+    expect(ids(filterNotes(PLACE_NOTES, { ...all, place: "none", categories: ["errand"] }, KNOWN))).toEqual([
+      buyMilk._id,
+      deletedPlace._id,
+    ]);
+    expect(ids(filterNotes(PLACE_NOTES, { ...all, place: "none", query: "book" }, KNOWN))).toEqual([deletedPlace._id]);
+    expect(ids(filterNotes(PLACE_NOTES, { ...all, place: "p-gym", folder: "Uni", categories: ["errand"] }, KNOWN))).toEqual(
+      [atGymAt6._id]
+    );
+    expect(filterNotes(PLACE_NOTES, { ...all, place: "p-gym", folder: "General" }, KNOWN)).toEqual([]);
+  });
+
+  test("hasActiveFilters: a picked place counts, All places doesn't", () => {
+    expect(hasActiveFilters({ ...all, place: "p-home" })).toBe(true);
+    expect(hasActiveFilters({ ...all, place: "none" })).toBe(true);
+    expect(hasActiveFilters({ ...all, place: "all" })).toBe(false);
+  });
 });

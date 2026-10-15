@@ -1,5 +1,5 @@
 import { currentPlaceLabel, noteCardInfo } from "./noteCardInfo";
-import { DEFAULT_CATEGORY_COLORS } from "./categoryColors";
+import { CATEGORIES, contrastRatio, DEFAULT_CATEGORY_COLORS, hueOf } from "./categoryColors";
 import { darkColors, lightColors as colors } from "../theme";
 import { Note } from "../types/notes";
 
@@ -59,16 +59,43 @@ describe("meta line", () => {
     );
   });
 
-  test("…and textMuted when it isn't (e.g. a light yellow)", () => {
+  // every kind shows in its own color: as is when readable, else a darker
+  // (light mode) or lighter (dark mode) shade of it, never the grey textMuted
+  describe.each([
+    ["light", colors],
+    ["dark", darkColors],
+  ])("each category gets its color on the %s card", (_mode, palette) => {
+    test.each(CATEGORIES.map((c) => [c]))("%s", (category) => {
+      const color = DEFAULT_CATEGORY_COLORS[category];
+      const shown = noteCardInfo(note({ category }), PLACES, DEFAULT_CATEGORY_COLORS, palette).categoryTextColor;
+      expect(shown).not.toBe(palette.textMuted);
+      expect(contrastRatio(shown, palette.surface)).toBeGreaterThanOrEqual(4.5);
+      expect(Math.abs(hueOf(shown) - hueOf(color))).toBeLessThanOrEqual(2);
+    });
+  });
+
+  test("Errand's green (contrast 4.1 on white) shows as a slightly darker green, not grey", () => {
+    const shown = noteCardInfo(note({ category: "errand" }), PLACES, DEFAULT_CATEGORY_COLORS).categoryTextColor;
+    expect(shown).not.toBe(DEFAULT_CATEGORY_COLORS.errand);
+    expect(shown).not.toBe(colors.textMuted);
+    expect(contrastRatio(shown, colors.surface)).toBeGreaterThanOrEqual(4.5);
+    // only as dark as needed
+    expect(contrastRatio(shown, colors.surface)).toBeLessThan(5);
+  });
+
+  test("a light custom color (yellow) is darkened until readable on white", () => {
     const custom = { ...DEFAULT_CATEGORY_COLORS, idea: "#FFEB3B" };
-    expect(noteCardInfo(note({ category: "idea" }), PLACES, custom).categoryTextColor).toBe(colors.textMuted);
+    const shown = noteCardInfo(note({ category: "idea" }), PLACES, custom).categoryTextColor;
+    expect(shown).not.toBe(colors.textMuted);
+    expect(contrastRatio(shown, colors.surface)).toBeGreaterThanOrEqual(4.5);
+    expect(Math.abs(hueOf(shown) - hueOf("#FFEB3B"))).toBeLessThanOrEqual(2);
   });
 
   test("dark mode: category text must be readable on the dark card", () => {
-    // the default task blue is too dark on a dark card -> textMuted
-    expect(
-      noteCardInfo(note({ category: "todo" }), PLACES, DEFAULT_CATEGORY_COLORS, darkColors).categoryTextColor
-    ).toBe(darkColors.textMuted);
+    // the default to-do blue is too dark on a dark card -> a lighter blue
+    const todo = noteCardInfo(note({ category: "todo" }), PLACES, DEFAULT_CATEGORY_COLORS, darkColors).categoryTextColor;
+    expect(todo).not.toBe(darkColors.textMuted);
+    expect(contrastRatio(todo, darkColors.surface)).toBeGreaterThanOrEqual(4.5);
     // a light yellow reads fine on a dark card
     const custom = { ...DEFAULT_CATEGORY_COLORS, idea: "#FFEB3B" };
     expect(noteCardInfo(note({ category: "idea" }), PLACES, custom, darkColors).categoryTextColor).toBe("#FFEB3B");
@@ -89,14 +116,37 @@ describe("meta line", () => {
 });
 
 describe("right side", () => {
-  test("the time when there is one", () => {
-    expect(noteCardInfo(note({ contexts: ["17:54"] }), PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({
+  test("a time the user set: plain time", () => {
+    const set = note({ remind_time_explicit: true, remind_at_hour: 8, remind_at_minute: 5 });
+    expect(noteCardInfo(set, PLACES, DEFAULT_CATEGORY_COLORS).trailing).toMatchObject({
       kind: "time",
-      time: "17:54",
+      time: "08:05",
+      smart: false,
     });
   });
 
-  test("smart alerts: sparkles", () => {
+  test("a time Smart picked (from the note text or a place default): the time, marked smart", () => {
+    expect(noteCardInfo(note({ contexts: ["17:54"] }), PLACES, DEFAULT_CATEGORY_COLORS).trailing).toMatchObject({
+      kind: "time",
+      time: "17:54",
+      smart: true,
+    });
+    expect(
+      noteCardInfo(note({ contexts: ["id-home", "09:00"], reminder_time_source: "default" }), PLACES, DEFAULT_CATEGORY_COLORS)
+        .trailing
+    ).toMatchObject({ kind: "time", time: "09:00", smart: true });
+  });
+
+  test("a leftover hour without the 'set by me' flag still counts as Smart", () => {
+    const leftover = note({ remind_time_explicit: false, remind_at_hour: 14, remind_at_minute: 0 });
+    expect(noteCardInfo(leftover, PLACES, DEFAULT_CATEGORY_COLORS).trailing).toMatchObject({
+      kind: "time",
+      time: "14:00",
+      smart: true,
+    });
+  });
+
+  test("smart alerts with no time at all (place only): just sparkles", () => {
     expect(noteCardInfo(note({}), PLACES, DEFAULT_CATEGORY_COLORS).trailing).toEqual({ kind: "smart" });
   });
 
@@ -110,6 +160,54 @@ describe("right side", () => {
     expect(
       noteCardInfo(note({ reminders_enabled: false, contexts: ["17:54"] }), PLACES, DEFAULT_CATEGORY_COLORS).trailing
     ).toEqual({ kind: "off" });
+  });
+});
+
+describe("the day of an alert that isn't today", () => {
+  // Wednesday 14 Oct 2026, 12:00
+  const NOW = new Date(2026, 9, 14, 12, 0);
+  const at = (remind_on_date: string | null, fields: Partial<Note> = {}) =>
+    noteCardInfo(note({ contexts: ["09:25"], remind_on_date, ...fields }), PLACES, DEFAULT_CATEGORY_COLORS, colors, NOW)
+      .trailing;
+
+  test.each([
+    ["no date (repeats daily)", null, null, "09:25", "Smart alert at 09:25"],
+    ["today", "2026-10-14", null, "09:25", "Smart alert at 09:25"],
+    ["tomorrow", "2026-10-15", "Tomorrow", "Tomorrow 09:25", "Smart alert tomorrow at 09:25"],
+    ["in 2 days", "2026-10-16", "Fri", "Fri 09:25", "Smart alert on Friday at 09:25"],
+    ["in 6 days", "2026-10-20", "Tue", "Tue 09:25", "Smart alert on Tuesday at 09:25"],
+    ["in 7 days", "2026-10-21", "21 Oct", "21 Oct 09:25", "Smart alert on 21 October at 09:25"],
+    ["further out", "2026-10-23", "23 Oct", "23 Oct 09:25", "Smart alert on 23 October at 09:25"],
+    ["next month", "2026-11-02", "2 Nov", "2 Nov 09:25", "Smart alert on 2 November at 09:25"],
+    ["yesterday (overdue)", "2026-10-13", "13 Oct", "13 Oct 09:25", "Smart alert on 13 October at 09:25"],
+    ["last week (overdue)", "2026-10-05", "5 Oct", "5 Oct 09:25", "Smart alert on 5 October at 09:25"],
+  ])("%s", (_name, date, day, label, spoken) => {
+    expect(at(date)).toEqual({
+      kind: "time",
+      time: "09:25",
+      day,
+      label,
+      accessibilityLabel: spoken,
+      smart: true,
+    });
+  });
+
+  test("a time the user set gets the day too, and stays not smart", () => {
+    const set = at("2026-10-15", { remind_time_explicit: true, remind_at_hour: 9, remind_at_minute: 25 });
+    expect(set).toEqual({
+      kind: "time",
+      time: "09:25",
+      day: "Tomorrow",
+      label: "Tomorrow 09:25",
+      accessibilityLabel: "Alert tomorrow at 09:25",
+      smart: false,
+    });
+  });
+
+  test("a dated note with no time keeps just the sparkles", () => {
+    expect(
+      noteCardInfo(note({ remind_on_date: "2026-10-15" }), PLACES, DEFAULT_CATEGORY_COLORS, colors, NOW).trailing
+    ).toEqual({ kind: "smart" });
   });
 });
 

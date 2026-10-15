@@ -113,32 +113,99 @@ fuzzy_time_map = {
 }
 
 
+# a time written in the note: "at 14:30", "the 9:45 exam", "4pm", "9:30am".
+# "at ..." wins over a bare time; dates like "9/10" are never times.
+_at_time = re.compile(r"\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?![\d:])")
+_colon_time = re.compile(r"(?<![\d:/.])(\d{1,2}):(\d{2})\s*(am|pm)?(?![\d:])")
+_ampm_time = re.compile(r"(?<![\d:/.])(\d{1,2})()\s*(am|pm)\b")
+
+# how long before that time to alert: "20 minutes early", "half an hour
+# before", "an hour ahead", "20 minuets early" (typos of minute count too),
+# "20 דקות לפני", "חצי שעה לפני", "שעתיים לפני"
+_lead_en = re.compile(
+    r"\b(?:(\d+(?:\.\d+)?)|(an?|one)|(half\s+an?)|((?:a\s+)?quarter\s+of\s+an?))\s*"
+    r"(min\w*|hours?|hrs?)\s+(?:early|earlier|before|ahead|in\s+advance|prior)\b"
+)
+_HEB = "\u05d0-\u05ea"
+_lead_he = re.compile(
+    r"(?<![" + _HEB + r"])(?:(\d+(?:\.\d+)?)\s*(דקות|דקה|דק'|שעות|שעה)|(חצי שעה|רבע שעה|שעתיים|שעה))"
+    r"\s+(?:לפני|מוקדם|קודם)"
+)
+_HE_LEADS = {"חצי שעה": 30, "רבע שעה": 15, "שעתיים": 120, "שעה": 60}
+
+
+def _clock(match) -> Optional[tuple]:
+    """(hour, minute) of a time match, or None if it isn't a real time."""
+    hour = int(match.group(1))
+    minute = int(match.group(2) or 0)
+    ampm = match.group(3)
+    if minute > 59:
+        return None
+    if ampm:
+        if not 1 <= hour <= 12:
+            return None
+        if ampm == "pm" and hour != 12:
+            hour += 12
+        if ampm == "am" and hour == 12:
+            hour = 0
+    elif match.group(2) is None or hour > 23:
+        # "at 5" alone isn't a time
+        return None
+    return hour, minute
+
+
+def _written_time(content_lower: str) -> Optional[tuple]:
+    for pattern in (_at_time, _colon_time, _ampm_time):
+        for match in pattern.finditer(content_lower):
+            clock = _clock(match)
+            if clock:
+                return clock
+    return None
+
+
+def lead_minutes(content: str) -> int:
+    """How many minutes before the note's time it wants the alert (0 if none)."""
+    lower = content.lower()
+    match = _lead_en.search(lower)
+    if match:
+        count, one, half, quarter, unit = match.groups()
+        per_unit = 1 if unit.startswith("min") else 60
+        if count:
+            return round(float(count) * per_unit)
+        if one:
+            return per_unit
+        if half:
+            return per_unit // 2
+        return per_unit // 4
+    match = _lead_he.search(content)
+    if match:
+        count, unit, phrase = match.groups()
+        if phrase:
+            return _HE_LEADS[phrase]
+        return round(float(count) * (60 if unit.startswith("שע") else 1))
+    return 0
+
+
 def infer_time(content: str) -> Optional[str]:
-    """Returns time as 'HH:MM' string, or None if not found."""
+    """Returns time as 'HH:MM' string, or None if not found.
+    A lead time ("20 minutes early") moves it earlier the same day."""
     content_lower = content.lower()
 
-    # "at 14:30" or "at 9:05"
-    match = re.search(r'\bat\s+(\d{1,2}):(\d{2})\b', content_lower)
-    if match:
-        h, m = int(match.group(1)), int(match.group(2))
-        return f"{h:02d}:{m:02d}"
+    clock = _written_time(content_lower)
+    if clock is None:
+        # fuzzy words
+        for word, t in fuzzy_time_map.items():
+            if word in content_lower:
+                clock = tuple(int(x) for x in t.split(":"))
+                break
+    if clock is None:
+        return None
 
-    # "at 2pm" or "at 11am"
-    match = re.search(r'\bat\s+(\d{1,2})(am|pm)\b', content_lower)
-    if match:
-        hour = int(match.group(1))
-        if match.group(2) == "pm" and hour != 12:
-            hour += 12
-        if match.group(2) == "am" and hour == 12:
-            hour = 0
-        return f"{hour:02d}:00"
-
-    # fuzzy words
-    for word, t in fuzzy_time_map.items():
-        if word in content_lower:
-            return t
-
-    return None
+    total = clock[0] * 60 + clock[1]
+    lead = lead_minutes(content)
+    if 0 < lead <= total:
+        total -= lead
+    return f"{total // 60:02d}:{total % 60:02d}"
 
 
 months = {
@@ -221,6 +288,67 @@ def infer_date(content: str, now: Optional[datetime] = None) -> Optional[str]:
         delta = timedelta(weeks=int(in_weeks_match.group(1)))
         return (reference + delta).strftime("%Y-%m-%d")
 
+    return None
+
+
+# ---- notes about arriving ("when I get home ...") ----
+#
+# They alert on arriving at the place, whatever the hour, so they get no
+# guessed time: not the place's default, and not a word like "dinner" read
+# as 20:00. Only a clock time written in the note ("at 18:00") is kept.
+# Same phrases as the phone's isAboutArriving (mobile/src/lib/arrivalNotes.ts),
+# plus Hebrew: "כשאגיע", "כשאני מגיעה", "כשאחזור", "ברגע שאהיה"...
+
+# Like the Hebrew, a time word comes first: "get back to the client" or
+# "the flight arrives friday" alone are ordinary to-dos.
+_arrival_english = re.compile(
+    r"\b(on arrival"
+    r"|(when|once|after|as soon as) i (get|reach|come|arrive)\b"
+    r"|(when|once) i'?m (at|home|there|back)\b"
+    r"|(when|once) i am (at|home|there|back)\b)"
+)
+# כש / ברגע ש / אחרי ש, maybe אני, then a verb of arriving or being there:
+# אגיע מגיע(ה) נגיע, אחזור חוזר(ת) נחזור, אהיה נהיה
+_arrival_hebrew = re.compile(
+    "(?:\u05db\u05e9|\u05d1\u05e8\u05d2\u05e2 \u05e9|\u05d0\u05d7\u05e8\u05d9 \u05e9)"
+    "(?:\u05d0\u05e0\u05d9\\s+)?"
+    "(?:\u05d0\u05d2\u05d9\u05e2|\u05de\u05d2\u05d9\u05e2\u05d4?|\u05e0\u05d2\u05d9\u05e2"
+    "|\u05d0\u05d7\u05d6\u05d5\u05e8|\u05d7\u05d5\u05d6\u05e8\u05ea?|\u05e0\u05d7\u05d6\u05d5\u05e8"
+    "|\u05d0\u05d4\u05d9\u05d4|\u05e0\u05d4\u05d9\u05d4)"
+)
+
+# where an arrival note is going, by Place.kind; Hebrew words may carry
+# prefix letters ("לעבודה", "בבית"). Only used for notes about arriving:
+# on its own "עבודה" is often an assignment.
+arrival_destinations = {
+    "home": ["home", "house", "\u05d1\u05d9\u05ea", "\u05d4\u05d1\u05d9\u05ea\u05d4"],  # בית הביתה
+    "uni": ["uni", "university", "campus",
+            "\u05d0\u05d5\u05e0\u05d9\u05d1\u05e8\u05e1\u05d9\u05d8\u05d4",  # אוניברסיטה
+            "\u05d0\u05d5\u05e0\u05d9", "\u05e7\u05de\u05e4\u05d5\u05e1"],  # אוני קמפוס
+    "work": ["work", "office", "\u05e2\u05d1\u05d5\u05d3\u05d4", "\u05de\u05e9\u05e8\u05d3"],  # עבודה משרד
+}
+
+
+# a clock time written in the note: "18:00", "at 6pm"; not "dinner"
+_written_clock = re.compile(r"(?<![\d:/.])\d{1,2}(?::\d{2}|\s*(?:am|pm)\b)")
+
+
+def has_written_clock(content: str) -> bool:
+    return bool(_written_clock.search(content.lower()))
+
+
+def is_about_arriving(content: str) -> bool:
+    lower = content.lower().replace("\u2019", "'")
+    return bool(_arrival_english.search(lower) or _arrival_hebrew.search(lower))
+
+
+def _arrival_destination(content: str, places: list):
+    """For a note about arriving, the Home/Uni/Work place it's going to."""
+    tokens = _tokens(content)
+    for place in places:
+        words = arrival_destinations.get(place.kind, [])
+        if any(_token_is(t, w) for t in tokens for w in words):
+            return place
     return None
 
 
@@ -349,6 +477,7 @@ def match_place_by_name(content: str, places: list):
 def infer_place(content: str, places: list):
     """The user's place a note belongs to, or None.
     1. a place the note names (match_place_by_name)
+    1b. for a note about arriving, where it's going ("when I get home")
     2. the built-in keywords of Home / Uni / Work
     3. semantic similarity between the note and each place's name + keywords
     """
@@ -357,6 +486,10 @@ def infer_place(content: str, places: list):
     named = match_place_by_name(content, places)
     if named:
         return named
+    if is_about_arriving(content):
+        destination = _arrival_destination(content, places)
+        if destination:
+            return destination
     text = content.lower()
     for place in places:
         if place.kind and any(_has_word(text, w) for w in kind_keywords.get(place.kind, [])):

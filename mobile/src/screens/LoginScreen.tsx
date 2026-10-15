@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -26,9 +26,10 @@ import {
   isSuccessResponse,
   statusCodes,
 } from "@react-native-google-signin/google-signin";
-import { authErrorMessage, resetErrorMessage } from "../lib/authErrors";
-import { colorFor, DEFAULT_CATEGORY_COLORS, textColorFor } from "../lib/categoryColors";
-import { Card, IconTile, PrimaryButton, TextButton } from "../components/ui";
+import * as AppleAuthentication from "expo-apple-authentication";
+import { authErrorMessage, isAppleCancel, resetErrorMessage } from "../lib/authErrors";
+import { appleSignInAvailable, signInWithApple } from "../services/appleSignIn";
+import { Card, PrimaryButton, TextButton } from "../components/ui";
 import { MIN_TOUCH_TARGET, Theme, fonts, radius, spacing } from "../theme";
 import { useTheme, useThemedStyles } from "../ThemeContext";
 
@@ -36,40 +37,18 @@ GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
 
 const RESET_SENT = "If an account exists for this email, we sent a reset link.";
 
-const TASK_COLOR = colorFor("todo", DEFAULT_CATEGORY_COLORS);
-
-// A note drawn like a card in the real list, to show what the app does
-// before signing in. Not a real note, so screen readers skip it.
-function SampleNote() {
-  const { colors, type } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-  return (
-    <View
-      testID="sample-note"
-      style={styles.sample}
-      importantForAccessibility="no-hide-descendants"
-      accessibilityElementsHidden
-    >
-      <IconTile icon="checkbox-outline" backgroundColor={TASK_COLOR} iconColor={textColorFor(TASK_COLOR)} />
-      <View style={styles.sampleBody}>
-        <Text style={type.body} numberOfLines={1}>
-          Water the plants
-        </Text>
-        <View style={styles.sampleMeta}>
-          <Text style={[type.caption, styles.sampleCategory]}>To-do</Text>
-          <Text style={type.caption}> · </Text>
-          <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-          <Text style={type.caption}> Home</Text>
-        </View>
-      </View>
-      <Text style={styles.sampleTime}>19:00</Text>
-    </View>
-  );
-}
-
 export default function LoginScreen() {
-  const { colors, type } = useTheme();
+  const { colors, type, scheme } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  // iPhone only, where Apple says it works
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    appleSignInAvailable().then((available) => mounted && setAppleAvailable(available));
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
@@ -101,6 +80,22 @@ export default function LoginScreen() {
       }
       // rare, and the message comes from Google
       Alert.alert("Google sign-in failed", e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    if (submitting) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await signInWithApple();
+    } catch (e: any) {
+      if (!isAppleCancel(e)) {
+        Alert.alert("Apple sign-in failed", e?.message ?? "Try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -170,8 +165,6 @@ export default function LoginScreen() {
             Write a note once. It comes back when you get to the place or time it's for.
           </Text>
 
-          <SampleNote />
-
           <Card>
             <TouchableOpacity
               style={styles.googleButton}
@@ -183,6 +176,21 @@ export default function LoginScreen() {
               <Ionicons name="logo-google" size={18} color={colors.text} />
               <Text style={styles.googleText}>Continue with Google</Text>
             </TouchableOpacity>
+
+            {appleAvailable && (
+              // Apple's own button (its style rules): black on light, white on dark
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={
+                  scheme === "dark"
+                    ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                    : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                }
+                cornerRadius={radius.chip}
+                style={styles.appleButton}
+                onPress={handleAppleSignIn}
+              />
+            )}
 
             <Text style={[type.caption, styles.label]}>Email</Text>
             <TextInput
@@ -268,21 +276,6 @@ const makeStyles = ({ colors, type }: Theme) =>
   content: { padding: spacing.screen, paddingTop: 32, gap: spacing.cardGap },
   title: { fontFamily: fonts.display, fontSize: 34, lineHeight: 44, color: colors.text },
   subtitle: { fontFamily: fonts.body, color: colors.textMuted, marginBottom: 4 },
-  sample: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderRadius: radius.noteCard,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  sampleBody: { flex: 1 },
-  sampleMeta: { flexDirection: "row", alignItems: "center", marginTop: 2 },
-  sampleCategory: { fontFamily: fonts.bodySemi, color: TASK_COLOR },
-  sampleTime: { fontFamily: fonts.bodyBold, fontSize: 17, color: colors.text, fontVariant: ["tabular-nums"] },
   googleButton: {
     height: 48,
     borderRadius: radius.chip,
@@ -295,6 +288,8 @@ const makeStyles = ({ colors, type }: Theme) =>
     gap: 10,
   },
   googleText: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.text },
+  // same size as the Google button; Apple's button needs an explicit size
+  appleButton: { width: "100%", height: 48, marginTop: 10 },
   label: { marginTop: 14, marginBottom: 6 },
   input: {
     height: 48,

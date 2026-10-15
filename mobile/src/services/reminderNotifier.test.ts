@@ -14,6 +14,7 @@ jest.mock("expo-notifications", () => ({
 }));
 jest.mock("../api/reminders", () => ({ getReminders: jest.fn() }));
 jest.mock("./scheduledReminders", () => ({ getScheduledNoteIds: jest.fn().mockResolvedValue(new Set()) }));
+jest.mock("./placeState", () => ({ trackedPlaceIds: jest.fn().mockResolvedValue([]) }));
 jest.mock("../api/client", () => ({ ...jest.requireActual("../api/client"), currentUserId: () => "uid-a" }));
 
 const notify = Notifications.scheduleNotificationAsync as jest.Mock;
@@ -94,4 +95,40 @@ test("another user's saved notes are never shown", async () => {
   fromServer.mockRejectedValue(new TypeError("Network request failed"));
   const result = await checkAndNotifyReminders({ onArrival: true });
   expect(result.notifiedCount).toBe(0);
+});
+
+describe("Check now at a note's time", () => {
+  const { trackedPlaceIds } = jest.requireMock("./placeState");
+  const homeAt1754 = note("p1", "remind me at home at 17:54", {
+    contexts: ["id-home", "17:54"],
+    reminder_time_source: "text",
+  });
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 2, 17, 55), doNotFake: ["nextTick", "setImmediate", "queueMicrotask"] });
+    fromServer.mockResolvedValue([homeAt1754]);
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    trackedPlaceIds.mockResolvedValue([]);
+  });
+
+  test("a time + place note doesn't alert when you're somewhere else", async () => {
+    trackedPlaceIds.mockResolvedValue(["id-home", "id-gym"]);
+    await setReminderLocation("id-gym");
+    await checkAndNotifyReminders({ force: true });
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  test("...and does when you're there", async () => {
+    trackedPlaceIds.mockResolvedValue(["id-home", "id-gym"]);
+    await checkAndNotifyReminders({ force: true });
+    expect(notify.mock.calls.map((c) => c[0].content.body)).toEqual(["remind me at home at 17:54"]);
+  });
+
+  test("location unavailable (the place isn't watched): it alerts, as before", async () => {
+    await setReminderLocation("unknown");
+    await checkAndNotifyReminders({ force: true });
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
 });

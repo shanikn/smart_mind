@@ -84,3 +84,59 @@ def test_home_location_returns_home_notes():
     collection.delete(ids=[note.id])
     delete_any(note.id)
     assert note.id in ids
+
+
+# ---- the place branch: arrival notes first, never cut; newest first on ties ----
+
+def _arrive_at_home(monkeypatch, notes):
+    """get_relevant_notes for Home, with these notes (no database)."""
+    import agents.relevance as relevance
+    from notepad import note_to_dict
+    from places import Place
+    home = Place(id="rel-home", user_id="rel-user", name="Home", kind="home")
+    docs = []
+    for note in notes:
+        doc = note_to_dict(note)
+        # MongoDB gives back naive datetimes, in UTC
+        doc["created_at"] = note.created_at.astimezone(timezone.utc).replace(tzinfo=None)
+        docs.append(doc)
+    monkeypatch.setattr(relevance, "get_places", lambda user_id: [home])
+    monkeypatch.setattr(relevance, "get_all_notes", lambda user_id: docs)
+    return [n.content for n in relevance.get_relevant_notes("", location="rel-home", hour=14, minute=0,
+                                                            user_id="rel-user")]
+
+
+def _home_note(content, days_ago):
+    return Note(content=content, contexts=["rel-home"], user_id="rel-user",
+                created_at=datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc) - timedelta(days=days_ago))
+
+
+def test_a_new_arrival_note_is_not_hidden_by_older_home_notes(monkeypatch):
+    older = [_home_note(f"old chore {i}", days_ago=10 + i) for i in range(4)]
+    new = _home_note("when I get home call mom", days_ago=0)
+    shown = _arrive_at_home(monkeypatch, older + [new])
+    assert shown[0] == "when I get home call mom"
+    assert len(shown) == 3
+
+
+def test_every_arrival_note_is_kept_even_past_three(monkeypatch):
+    arrivals = [_home_note(f"when I get home do thing {i}", days_ago=i) for i in range(4)]
+    hebrew = _home_note("כשאגיע הביתה לתלות כביסה", days_ago=5)
+    other = _home_note("water the plants", days_ago=0)
+    shown = _arrive_at_home(monkeypatch, [other] + arrivals + [hebrew])
+    assert len(shown) == 5
+    assert "water the plants" not in shown
+    assert shown[-1] == "כשאגיע הביתה לתלות כביסה"  # the oldest arrival note
+
+
+def test_equal_scores_newest_first(monkeypatch):
+    notes = [_home_note("oldest", days_ago=3), _home_note("newest", days_ago=0),
+             _home_note("middle", days_ago=1), _home_note("older", days_ago=2)]
+    assert _arrive_at_home(monkeypatch, notes) == ["newest", "middle", "older"]
+
+
+def test_a_higher_score_still_wins_over_a_newer_note(monkeypatch):
+    liked = _home_note("liked chore", days_ago=9)
+    liked.useful_count = 2
+    notes = [_home_note(f"new chore {i}", days_ago=i) for i in range(3)] + [liked]
+    assert _arrive_at_home(monkeypatch, notes)[0] == "liked chore"

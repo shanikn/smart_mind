@@ -2,12 +2,16 @@ import { folderNames, folderTabs, GENERAL } from "./folderOrder";
 
 const note = (list_name?: string) => ({ list_name }) as { list_name?: string };
 
-test("General comes first, the other folders keep their alphabetical order", () => {
-  expect(folderNames([note("Shopping"), note("Games"), note("General"), note("Uni")], [])).toEqual([
+test("General first, then the user's folders in their order (not A to Z)", () => {
+  expect(folderNames([note("Games")], ["Work", "Games", "art"])).toEqual([GENERAL, "Work", "Games", "art"]);
+});
+
+test("folders only notes use (not saved yet) come after the user's, A to Z", () => {
+  expect(folderNames([note("Shopping"), note("Games"), note("General"), note("Uni")], ["Uni"])).toEqual([
     GENERAL,
+    "Uni",
     "Games",
     "Shopping",
-    "Uni",
   ]);
 });
 
@@ -16,11 +20,12 @@ test("notes without a folder count as General", () => {
 });
 
 test("custom (empty) folders are included and de-duplicated", () => {
-  expect(folderNames([note("Games")], ["Ideas", "Games"])).toEqual([GENERAL, "Games", "Ideas"]);
+  expect(folderNames([note("Games")], ["Ideas", "Games"])).toEqual([GENERAL, "Ideas", "Games"]);
 });
 
 test("General is always there, even with no notes", () => {
   expect(folderNames([], [])).toEqual([GENERAL]);
+  expect(folderNames([], [GENERAL, "Work"])).toEqual([GENERAL, "Work"]);
 });
 
 test("notes list tabs: All, then General right after it, then the rest", () => {

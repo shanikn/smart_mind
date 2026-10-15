@@ -1,12 +1,22 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { signOut } from "firebase/auth";
+import { revokeAccessToken, signOut } from "firebase/auth";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { deleteAccount } from "../api/account";
 import { signOutCleanup } from "./signOutCleanup";
 import { deleteAccountAndSignOut } from "./accountDeletion";
 
 jest.mock("../api/account", () => ({ deleteAccount: jest.fn() }));
-jest.mock("firebase/auth", () => ({ signOut: jest.fn().mockResolvedValue(undefined) }));
+jest.mock("firebase/auth", () => ({ signOut: jest.fn().mockResolvedValue(undefined), revokeAccessToken: jest.fn() }));
 jest.mock("../config/firebase", () => ({ auth: { currentUser: { providerData: [{ providerId: "google.com" }] } } }));
+jest.mock("expo-apple-authentication", () => ({
+  signInAsync: jest.fn(),
+  AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+}));
+jest.mock("expo-crypto", () => ({
+  CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+  randomUUID: () => "raw-nonce",
+  digestStringAsync: jest.fn(async (_algorithm: string, value: string) => `sha256(${value})`),
+}));
 jest.mock("@react-native-google-signin/google-signin", () => ({
   GoogleSignin: { signOut: jest.fn().mockResolvedValue(undefined) },
 }));
@@ -61,4 +71,47 @@ test("a cleanup step failing doesn't stop the rest or the sign-out", async () =>
   await deleteAccountAndSignOut();
   expect(await AsyncStorage.getAllKeys()).toEqual([]);
   expect(signOut).toHaveBeenCalled();
+});
+
+describe("an account that signed in with Apple", () => {
+  const { auth } = jest.requireMock("../config/firebase");
+  const signInAsync = AppleAuthentication.signInAsync as jest.Mock;
+
+  beforeEach(() => {
+    auth.currentUser.providerData = [{ providerId: "apple.com" }];
+    signInAsync.mockImplementation(async () => {
+      order.push("apple");
+      return { identityToken: "id", authorizationCode: "fresh-code" };
+    });
+    (revokeAccessToken as jest.Mock).mockImplementation(async () => {
+      order.push("revoke");
+    });
+  });
+  afterEach(() => {
+    auth.currentUser.providerData = [{ providerId: "google.com" }];
+  });
+
+  test("confirms with Apple once more, revokes the Apple token, then deletes", async () => {
+    await deleteAccountAndSignOut();
+    expect(order).toEqual(["apple", "revoke", "server", "cleanup", "signOut"]);
+    expect(revokeAccessToken).toHaveBeenCalledWith(auth, "fresh-code");
+    const { GoogleSignin } = jest.requireMock("@react-native-google-signin/google-signin");
+    expect(GoogleSignin.signOut).not.toHaveBeenCalled();
+  });
+
+  test("closing the Apple sheet deletes nothing", async () => {
+    signInAsync.mockRejectedValue(Object.assign(new Error("canceled"), { code: "ERR_REQUEST_CANCELED" }));
+    await expect(deleteAccountAndSignOut()).rejects.toMatchObject({ code: "ERR_REQUEST_CANCELED" });
+    expect(revokeAccessToken).not.toHaveBeenCalled();
+    expect(deleteAccount).not.toHaveBeenCalled();
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  test("Google accounts keep today's flow: no Apple step", async () => {
+    auth.currentUser.providerData = [{ providerId: "google.com" }];
+    await deleteAccountAndSignOut();
+    expect(signInAsync).not.toHaveBeenCalled();
+    expect(revokeAccessToken).not.toHaveBeenCalled();
+    expect(order).toEqual(["server", "cleanup", "signOut"]);
+  });
 });

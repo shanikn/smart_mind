@@ -16,10 +16,11 @@ import { useNavigation, useRoute, useFocusEffect, RouteProp } from "@react-navig
 import { apiErrorMessage } from "../api/client";
 import { createNote, updateNote, getNotes } from "../api/notes";
 import { NotesStackParamList } from "../../App";
-import { getCustomLists } from "../lib/listPrefs";
+import { loadFolders } from "../services/foldersStore";
 import { folderNames, GENERAL } from "../lib/folderOrder";
 import { syncScheduledReminders } from "../services/scheduledReminders";
 import { syncStoreAlerts } from "../services/storeAlerts";
+import { deleteWithUndo } from "../services/pendingDelete";
 import { loadPlaces } from "../services/placesStore";
 import { ServerPlace } from "../lib/userPlaces";
 import { CATEGORIES, categoryLabel, normalizeCategory } from "../lib/categoryColors";
@@ -142,9 +143,9 @@ export default function AddEditNoteScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      Promise.all([getNotes(), getCustomLists()])
+      Promise.all([getNotes(), loadFolders().catch(() => [])])
         .then(([notes, customLists]) => {
-          // General first, then the other folders alphabetically
+          // General first, then the user's folder order (lib/folderOrder.ts)
           setExistingLists(folderNames(notes, customLists));
         })
         .catch(() => {});
@@ -209,6 +210,12 @@ export default function AddEditNoteScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // the list hides the note with an Undo bar; the server delete waits
+  const handleDelete = () => {
+    deleteWithUndo(existingNote!);
+    navigation.goBack();
   };
 
   const handleDateChange = (_event: DateTimePickerEvent, nextDate?: Date) => {
@@ -375,6 +382,10 @@ export default function AddEditNoteScreen() {
             ))}
           </ChipRow>
         </Card>
+
+        {isEditing && (
+          <TextButton label="Delete note" destructive onPress={handleDelete} style={styles.deleteButton} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -428,4 +439,5 @@ const makeStyles = ({ colors, type }: Theme) =>
   resetRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   resetCaption: { flex: 1 },
   chips: { marginTop: 10 },
+  deleteButton: { alignSelf: "center" },
 });
