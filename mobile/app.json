@@ -12,6 +12,7 @@
       "bundleIdentifier": "com.shanini.smartmind",
       "appleTeamId": "8U97QRUZA5",
       "googleServicesFile": "./GoogleService-Info.plist",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSUserNotificationUsageDescription": "Smart Mind uses notifications to remind you about notes at the right moment."

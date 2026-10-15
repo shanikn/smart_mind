@@ -1,20 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { TextButton } from "./ui";
+import { isAppleCancel } from "../lib/authErrors";
 import { MIN_TOUCH_TARGET, Theme, fonts, radius } from "../theme";
 import { useTheme, useThemedStyles } from "../ThemeContext";
 
 const CONFIRM_WORD = "DELETE";
 
 // Permanently delete the account: says what goes, and needs DELETE typed.
+// An Apple account then confirms with Apple once more (services/accountDeletion.ts).
 export default function DeleteAccountModal({
   visible,
   email,
+  confirmWithApple = false,
   onConfirm,
   onCancel,
 }: {
   visible: boolean;
   email: string | null;
+  confirmWithApple?: boolean;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
 }) {
@@ -42,8 +46,11 @@ export default function DeleteAccountModal({
     setError(null);
     try {
       await onConfirm();
-    } catch {
-      setError("Couldn't delete your account. Check your connection and try again.");
+    } catch (e) {
+      // closing Apple's sheet just stops; nothing was deleted
+      if (!isAppleCancel(e)) {
+        setError("Couldn't delete your account. Check your connection and try again.");
+      }
       setBusy(false);
     }
   };
@@ -57,7 +64,9 @@ export default function DeleteAccountModal({
             This permanently deletes {email ?? "your account"} and everything in it: all your notes, your saved
             places, and your settings on this phone. It can&apos;t be undone.
           </Text>
-          <Text style={type.caption}>Type {CONFIRM_WORD} to confirm.</Text>
+          <Text style={type.caption}>
+            Type {CONFIRM_WORD} to confirm.{confirmWithApple ? " Then confirm with Apple once more." : ""}
+          </Text>
           <TextInput
             style={styles.input}
             value={typed}

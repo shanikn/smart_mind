@@ -749,7 +749,8 @@ export default function SettingsScreen() {
         <Card>
           <Text style={type.caption}>Signed in as</Text>
           <Text style={type.body} numberOfLines={1} ellipsizeMode="tail">
-            {user?.email}
+            {/* Apple may share a relay address, or none at all */}
+            {user?.email || "your Apple ID"}
           </Text>
           <View style={styles.signOutRow}>
             <TextButton label="Sign out" destructive onPress={handleSignOut} />
@@ -787,6 +788,7 @@ export default function SettingsScreen() {
       <DeleteAccountModal
         visible={deletingAccount}
         email={user?.email ?? null}
+        confirmWithApple={user?.providerData?.some((p) => p.providerId === "apple.com") ?? false}
         onConfirm={deleteAccountAndSignOut}
         onCancel={() => setDeletingAccount(false)}
       />

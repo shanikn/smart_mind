@@ -34,3 +34,8 @@ export function resetErrorMessage(error: unknown): string | null {
   }
   return (typeof code === "string" && RESET_MESSAGES[code]) || "Couldn't send the reset email. Try again later.";
 }
+
+// the user closed Apple's sign-in sheet (expo-apple-authentication): not an error
+export function isAppleCancel(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === "ERR_REQUEST_CANCELED";
+}

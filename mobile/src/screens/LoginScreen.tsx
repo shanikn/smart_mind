@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -26,7 +26,9 @@ import {
   isSuccessResponse,
   statusCodes,
 } from "@react-native-google-signin/google-signin";
-import { authErrorMessage, resetErrorMessage } from "../lib/authErrors";
+import * as AppleAuthentication from "expo-apple-authentication";
+import { authErrorMessage, isAppleCancel, resetErrorMessage } from "../lib/authErrors";
+import { appleSignInAvailable, signInWithApple } from "../services/appleSignIn";
 import { Card, PrimaryButton, TextButton } from "../components/ui";
 import { MIN_TOUCH_TARGET, Theme, fonts, radius, spacing } from "../theme";
 import { useTheme, useThemedStyles } from "../ThemeContext";
@@ -36,8 +38,17 @@ GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
 const RESET_SENT = "If an account exists for this email, we sent a reset link.";
 
 export default function LoginScreen() {
-  const { colors, type } = useTheme();
+  const { colors, type, scheme } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  // iPhone only, where Apple says it works
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    appleSignInAvailable().then((available) => mounted && setAppleAvailable(available));
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
@@ -69,6 +80,22 @@ export default function LoginScreen() {
       }
       // rare, and the message comes from Google
       Alert.alert("Google sign-in failed", e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    if (submitting) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await signInWithApple();
+    } catch (e: any) {
+      if (!isAppleCancel(e)) {
+        Alert.alert("Apple sign-in failed", e?.message ?? "Try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -149,6 +176,21 @@ export default function LoginScreen() {
               <Ionicons name="logo-google" size={18} color={colors.text} />
               <Text style={styles.googleText}>Continue with Google</Text>
             </TouchableOpacity>
+
+            {appleAvailable && (
+              // Apple's own button (its style rules): black on light, white on dark
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={
+                  scheme === "dark"
+                    ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                    : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                }
+                cornerRadius={radius.chip}
+                style={styles.appleButton}
+                onPress={handleAppleSignIn}
+              />
+            )}
 
             <Text style={[type.caption, styles.label]}>Email</Text>
             <TextInput
@@ -246,6 +288,8 @@ const makeStyles = ({ colors, type }: Theme) =>
     gap: 10,
   },
   googleText: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.text },
+  // same size as the Google button; Apple's button needs an explicit size
+  appleButton: { width: "100%", height: 48, marginTop: 10 },
   label: { marginTop: 14, marginBottom: 6 },
   input: {
     height: 48,

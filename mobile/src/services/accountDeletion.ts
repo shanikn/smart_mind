@@ -3,6 +3,7 @@ import { signOut } from "firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { deleteAccount } from "../api/account";
 import { auth } from "../config/firebase";
+import { revokeAppleSignIn, signedInWithApple } from "./appleSignIn";
 import { signOutCleanup } from "./signOutCleanup";
 
 async function quietly(step: () => Promise<unknown>): Promise<void> {
@@ -16,7 +17,12 @@ async function quietly(step: () => Promise<unknown>): Promise<void> {
 // Delete the account on the server (notes, places, the Firebase user). Only
 // if that worked: stop geofences and alarms, clear everything this app keeps
 // on the phone, and sign out. If the server fails, nothing changes here.
+// An Apple account first confirms with Apple once more and revokes the app's
+// Apple tokens (Apple requires it); closing Apple's sheet deletes nothing.
 export async function deleteAccountAndSignOut(): Promise<void> {
+  if (signedInWithApple()) {
+    await revokeAppleSignIn();
+  }
   await deleteAccount();
   const usedGoogle = auth.currentUser?.providerData.some((p) => p.providerId === "google.com") ?? false;
   // what every sign-out does (geofences, alarms and scheduled notifications,

@@ -3,11 +3,17 @@ import { Text, TextInput, TouchableOpacity } from "react-native";
 import TestRenderer, { act, ReactTestRenderer } from "react-test-renderer";
 import DeleteAccountModal from "./DeleteAccountModal";
 
-async function render(onConfirm = jest.fn().mockResolvedValue(undefined), onCancel = jest.fn()) {
+async function render(onConfirm = jest.fn().mockResolvedValue(undefined), onCancel = jest.fn(), withApple = false) {
   let tree!: ReactTestRenderer;
   await act(async () => {
     tree = TestRenderer.create(
-      <DeleteAccountModal visible email="someone@example.com" onConfirm={onConfirm} onCancel={onCancel} />
+      <DeleteAccountModal
+        visible
+        email="someone@example.com"
+        confirmWithApple={withApple}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
     );
   });
   return tree;
@@ -69,4 +75,22 @@ test("Cancel cancels", async () => {
   const tree = await render(jest.fn(), onCancel);
   await act(async () => button(tree, "Cancel").props.onPress());
   expect(onCancel).toHaveBeenCalled();
+});
+
+describe("an account that signed in with Apple", () => {
+  test("says Apple will ask to confirm once more; Google accounts don't see it", async () => {
+    expect(textOf(await render(undefined, undefined, true))).toMatch(/confirm with Apple/);
+    expect(textOf(await render())).not.toMatch(/Apple/);
+  });
+
+  test("closing the Apple sheet: no error, and you can try again", async () => {
+    const onConfirm = jest
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("canceled"), { code: "ERR_REQUEST_CANCELED" }));
+    const tree = await render(onConfirm, undefined, true);
+    await type(tree, "DELETE");
+    await act(async () => button(tree, "Delete my account").props.onPress());
+    expect(textOf(tree)).not.toMatch(/Couldn't delete/);
+    expect(button(tree, "Delete my account").props.disabled).toBe(false);
+  });
 });
