@@ -25,3 +25,9 @@ test("the location texts say what the app does: arrivals, stores for errands, wh
   expect(whenInUse).toMatch(/saved places/);
   expect(whenInUse).toMatch(/store/);
 });
+
+// expo-location's startGeofencingAsync throws on iOS without the "location"
+// background mode, which this flag adds
+test("iOS keeps the location background mode that geofencing needs", () => {
+  expect(locationPlugin().isIosBackgroundLocationEnabled).toBe(true);
+});
