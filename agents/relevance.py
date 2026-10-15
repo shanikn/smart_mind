@@ -2,6 +2,7 @@ import chromadb
 import os
 import sys
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,7 @@ from agents.clock import local_now  # noqa: E402
 from agents.context import get_location_bucket  # noqa: E402
 from places import get_places  # noqa: E402
 from agents.ranking_policy import score, is_on_cooldown  # noqa: E402
+from agents.categorizer import is_about_arriving  # noqa: E402
 from agents.embedding_model import get_embedding_model  # noqa: E402
 
 # chromadb setup
@@ -59,7 +61,38 @@ def _context_bonus(note, location_bucket, current_hour, current_minute):
     return loc_bonus + time_bonus
 
 
-# return top 3 notes via direct location match or semantic search fallback
+MAX_RESULTS = 3
+_OLDEST = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _created(note):
+    """created_at as an aware UTC time (MongoDB gives naive UTC), for newest first."""
+    value = note.created_at
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return _OLDEST
+    if not isinstance(value, datetime):
+        return _OLDEST
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def _rank_for_place(notes, location_bucket, current_hour, current_minute):
+    """Notes about arriving ("when I get home ...") first, every one of them:
+    they're why you came. Others fill up to MAX_RESULTS. Best score first,
+    newest first on equal scores, so older notes can't hide a new one."""
+    def key(note):
+        return (score(note) + _context_bonus(note, location_bucket, current_hour, current_minute), _created(note))
+
+    ranked = sorted(notes, key=key, reverse=True)
+    arriving = [n for n in ranked if is_about_arriving(n.content)]
+    others = [n for n in ranked if not is_about_arriving(n.content)]
+    return arriving + others[:max(0, MAX_RESULTS - len(arriving))]
+
+
+# top notes via direct location match (arrival notes never cut), or the top 3
+# by semantic search fallback
 def get_relevant_notes(
     query: str, location: str = "unknown", hour: Optional[int] = None,
     minute: Optional[int] = None, user_id: Optional[str] = None
@@ -87,14 +120,7 @@ def get_relevant_notes(
             if not is_on_cooldown(n) and _is_due_today(n, today_str)
         ]
         if candidates:
-            ranked = sorted(
-                candidates,
-                key=lambda x: score(x) + _context_bonus(
-                    x, location_bucket, current_hour, current_minute
-                ),
-                reverse=True
-            )
-            return ranked[:3]
+            return _rank_for_place(candidates, location_bucket, current_hour, current_minute)
 
     # fallback: semantic search when location is unknown or no matches
     embedding = get_embedding_model().encode(query).tolist()

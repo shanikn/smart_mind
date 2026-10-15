@@ -72,6 +72,22 @@ describe("isAboutArriving (same phrases as the server)", () => {
       expect([content, isAboutArriving(note({ content }))]).toEqual([content, true]);
     }
   });
+
+  test("Hebrew, like the server's _arrival_hebrew: כש / ברגע ש / אחרי ש, maybe אני, then arriving or being there", () => {
+    for (const content of [
+      "כשאגיע הביתה לתלות כביסה",
+      "כשאני מגיעה לעבודה לשלוח מייל",
+      "כשאחזור הביתה לבשל",
+      "ברגע שאהיה בבית להתקשר לאמא",
+      "אחרי שנגיע לקמפוס להדפיס",
+      "כשאני חוזרת הביתה לבשל",
+    ]) {
+      expect([content, isAboutArriving(note({ content }))]).toEqual([content, true]);
+    }
+    for (const content of ["להגיע לפגישה בזמן", "לחזור ללקוח מחר", "לקנות חלב"]) {
+      expect([content, isAboutArriving(note({ content }))]).toEqual([content, false]);
+    }
+  });
 });
 
 describe("arrivalCandidates (notes to show when you arrive at a place)", () => {
@@ -91,6 +107,20 @@ describe("arrivalCandidates (notes to show when you arrive at a place)", () => {
       const x = note({ content, contexts: ["id-home", "18:00"], reminder_time_source: "text" });
       expect(arrivalCandidates([x])).toEqual([x]);
     }
+  });
+
+  test("every arrival note is kept (even past 3), first; other notes only fill up to 3", () => {
+    const others = [1, 2, 3].map((i) => note({ content: `chore ${i}` }));
+    const arrivals = [
+      note({ content: "when I get home water the plants" }),
+      note({ content: "כשאגיע הביתה לתלות כביסה" }),
+      note({ content: "once I'm home call dad" }),
+      note({ content: "on arrival check in" }),
+    ];
+    expect(arrivalCandidates([others[0], arrivals[0], others[1], arrivals[1], arrivals[2], arrivals[3]])).toEqual(
+      arrivals
+    );
+    expect(arrivalCandidates([others[0], arrivals[1], others[1], others[2]])).toEqual([arrivals[1], others[0], others[1]]);
   });
 
   test("keeps the backend's ranking and takes at most 3", () => {

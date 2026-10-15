@@ -1,11 +1,14 @@
 import { Note } from "../types/notes";
 import { canAlert } from "./alertRules";
+import { arriveFirst } from "./arrivalNotes";
 import { UNKNOWN } from "./userPlaces";
 
 // The server's choice of notes for a place (agents/relevance.py, the place
 // branch), done on the phone from the notes saved at the last sync, for
 // when the server can't be reached. Without the server there's no
 // meaning-based matching, so only notes tagged with the place count.
+// Like the server: notes about arriving first and never cut, others fill up
+// to 3, best score first and newest first on equal scores.
 
 export const MAX_OFFLINE_REMINDERS = 3;
 const TIME_BONUS_MINUTES = 60;
@@ -29,6 +32,12 @@ function isSnoozed(note: Note, now: Date): boolean {
   return !Number.isNaN(until) && until > now.getTime();
 }
 
+// when the note was created; the oldest possible when unknown
+function createdTime(note: Note): number {
+  const time = note.created_at ? serverTime(note.created_at) : NaN;
+  return Number.isNaN(time) ? -Infinity : time;
+}
+
 function score(note: Note): number {
   return (note.useful_count ?? 0) - (note.dismissed_count ?? 0) * 0.5;
 }
@@ -50,7 +59,7 @@ export function offlineReminders(notes: Note[], location: string, now: Date): No
     return [];
   }
   const today = localDay(now);
-  return notes
+  const ranked = notes
     .filter(
       (n) =>
         (n.contexts ?? []).includes(location) &&
@@ -59,8 +68,9 @@ export function offlineReminders(notes: Note[], location: string, now: Date): No
         !isSnoozed(n, now) &&
         (n.remind_on_date == null || n.remind_on_date === today)
     )
-    .map((n, i) => ({ n, i, rank: score(n) + timeBonus(n, now) }))
-    .sort((a, b) => b.rank - a.rank || a.i - b.i)
-    .slice(0, MAX_OFFLINE_REMINDERS)
+    .map((n, i) => ({ n, i, rank: score(n) + timeBonus(n, now), created: createdTime(n) }))
+    // best first; newest first on equal scores (unknown times tie, keeping their order)
+    .sort((a, b) => b.rank - a.rank || (a.created === b.created ? 0 : b.created > a.created ? 1 : -1) || a.i - b.i)
     .map(({ n }) => n);
+  return arriveFirst(ranked, MAX_OFFLINE_REMINDERS);
 }

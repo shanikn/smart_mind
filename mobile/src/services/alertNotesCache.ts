@@ -50,6 +50,7 @@ function slim(n: Note): Note {
     store_type: n.store_type ?? null,
     useful_count: n.useful_count ?? 0,
     dismissed_count: n.dismissed_count ?? 0,
+    created_at: n.created_at, // offline ranking: newest first on equal scores
   } as Note;
 }
 

@@ -65,6 +65,7 @@ test("keeps only notes that can alert, with what the arrival check needs", async
     store_type: null,
     useful_count: 1,
     dismissed_count: 0,
+    created_at: "2026-10-01T10:00:00", // offline ranking: newest first on ties
   });
   expect(cached[1].store_type).toBe("pharmacy");
 });
