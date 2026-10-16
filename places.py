@@ -3,7 +3,9 @@ from typing import Optional
 from uuid import uuid4
 import logging
 
-from notepad import db
+from pymongo.errors import DuplicateKeyError
+
+from notepad import db, notes_collection
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,9 @@ places_collection = db["places"]
 
 # every user starts with these; "kind" links them to the built-in keywords
 DEFAULT_PLACES = [("home", "Home"), ("uni", "Uni"), ("work", "Work")]
+DEFAULT_NAMES = dict(DEFAULT_PLACES)
+# one Home, Uni and Work per user; custom places (kind None) aren't limited
+DEFAULT_KIND_INDEX = "user_id_kind_unique"
 
 
 @dataclass
@@ -26,8 +31,71 @@ class Place:
 
 
 def ensure_place_indexes():
-    """Idempotent: places are always looked up by owner."""
+    """Idempotent: places are always looked up by owner, and each user has
+    one place of each default kind. Duplicates stored before the unique
+    index existed are merged first, so it can be created."""
     places_collection.create_index("user_id")
+    dedupe_default_places()
+    places_collection.create_index(
+        [("user_id", 1), ("kind", 1)],
+        name=DEFAULT_KIND_INDEX,
+        unique=True,
+        partialFilterExpression={"kind": {"$type": "string"}},
+    )
+
+
+def _keep_first(doc: dict, note_counts: dict) -> tuple:
+    """Sort key: the copy the user edited (renamed or given keywords), then
+    the one most notes are tagged with, then the lowest id."""
+    edited = doc.get("name") != DEFAULT_NAMES.get(doc["kind"]) or bool(doc.get("keywords"))
+    return (not edited, -note_counts[doc["_id"]], doc["_id"])
+
+
+def _retag_notes(user_id, removed_ids: list, kept_id: str):
+    """Point the user's notes at the kept place instead of the removed copies
+    (contexts and location_value; location_explicit stays as it was)."""
+    removed = set(removed_ids)
+    query = {"user_id": user_id, "$or": [{"contexts": {"$in": removed_ids}}, {"location_value": {"$in": removed_ids}}]}
+    for note in notes_collection.find(query, {"contexts": 1, "location_value": 1}):
+        contexts = []
+        for value in note.get("contexts") or []:
+            value = kept_id if value in removed else value
+            if value not in contexts:
+                contexts.append(value)
+        fields = {"contexts": contexts}
+        if note.get("location_value") in removed:
+            fields["location_value"] = kept_id
+        notes_collection.update_one({"_id": note["_id"]}, {"$set": fields})
+
+
+def dedupe_default_places() -> int:
+    """Merge copies of a user's default places (made by first requests that
+    raced before the unique index). Keeps one copy (see _keep_first) with
+    every copy's keywords, re-tags notes to it and deletes the rest.
+    Returns how many copies were removed."""
+    groups = places_collection.aggregate([
+        {"$match": {"kind": {"$type": "string"}}},
+        {"$group": {"_id": {"user_id": "$user_id", "kind": "$kind"}, "ids": {"$push": "$_id"}}},
+        {"$match": {"ids.1": {"$exists": True}}},
+    ])
+    removed_count = 0
+    for group in groups:
+        user_id = group["_id"]["user_id"]
+        docs = list(places_collection.find({"_id": {"$in": group["ids"]}}))
+        note_counts = {d["_id"]: notes_collection.count_documents({"user_id": user_id, "contexts": d["_id"]})
+                       for d in docs}
+        docs.sort(key=lambda d: _keep_first(d, note_counts))
+        kept, extra = docs[0], docs[1:]
+        keywords = []
+        for d in docs:
+            keywords += [k for k in d.get("keywords") or [] if k not in keywords]
+        places_collection.update_one({"_id": kept["_id"]}, {"$set": {"keywords": keywords}})
+        extra_ids = [d["_id"] for d in extra]
+        _retag_notes(user_id, extra_ids, kept["_id"])
+        removed_count += places_collection.delete_many({"_id": {"$in": extra_ids}}).deleted_count
+    if removed_count:
+        logger.info("Merged duplicate default places: removed %d copies", removed_count)
+    return removed_count
 
 
 def place_to_dict(place: Place) -> dict:
@@ -52,16 +120,20 @@ def _from_doc(d: dict) -> Place:
 
 
 def _seed_defaults(user_id: Optional[str]):
-    # upsert by (user, kind) so concurrent first requests can't duplicate
+    # upsert by (user, kind); the unique index stops concurrent first
+    # requests from inserting a second copy (they get DuplicateKeyError)
     for order, (kind, name) in enumerate(DEFAULT_PLACES):
-        places_collection.update_one(
-            {"user_id": user_id, "kind": kind},
-            {"$setOnInsert": {
-                "_id": str(uuid4()), "user_id": user_id, "name": name,
-                "keywords": [], "kind": kind, "order": order,
-            }},
-            upsert=True,
-        )
+        try:
+            places_collection.update_one(
+                {"user_id": user_id, "kind": kind},
+                {"$setOnInsert": {
+                    "_id": str(uuid4()), "user_id": user_id, "name": name,
+                    "keywords": [], "kind": kind, "order": order,
+                }},
+                upsert=True,
+            )
+        except DuplicateKeyError:
+            pass  # another request just created it
 
 
 def get_places(user_id: Optional[str]) -> list[Place]:
