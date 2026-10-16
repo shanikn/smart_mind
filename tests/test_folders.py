@@ -236,3 +236,44 @@ def test_a_deleted_folder_made_again_goes_at_the_end():
                                   {"names": ["a"] * 501}])
 def test_a_bad_order_is_422(body):
     assert client.put("/folders/order", json=body, headers=AS_A).status_code == 422
+
+
+# --- one folder per name and user, even when two requests race ---
+
+def _drop_unique_index():
+    if folders.FOLDER_KEY_INDEX in folders.folders_collection.index_information():
+        folders.folders_collection.drop_index(folders.FOLDER_KEY_INDEX)
+
+
+def test_index_setup_removes_stored_duplicates_and_keeps_the_first():
+    _drop_unique_index()
+    docs = [
+        {"_id": "dup-1", "user_id": A, "name": "Games", "key": "games", "order": 0},
+        {"_id": "dup-2", "user_id": A, "name": "games", "key": "games", "order": 1},
+        {"_id": "dup-3", "user_id": B, "name": "Games", "key": "games", "order": 0},
+    ]
+    folders.folders_collection.insert_many(docs)
+    folders.ensure_folder_indexes()
+    assert _names() == ["Games"]
+    assert _names(AS_B) == ["Games"]  # another user's folder with the same name stays
+    with pytest.raises(folders.DuplicateKeyError):
+        folders.folders_collection.insert_one({"user_id": A, "name": "GAMES", "key": "games", "order": 2})
+
+
+def test_two_creates_at_once_store_one_folder_and_the_second_is_409(monkeypatch):
+    folders.ensure_folder_indexes()
+    assert client.post("/folders/", json={"name": "Games"}, headers=AS_A).status_code == 200
+    # the second request checked before the first one stored the folder
+    monkeypatch.setattr(folders, "_exists", lambda user_id, name: False)
+    res = client.post("/folders/", json={"name": "games"}, headers=AS_A)
+    assert res.status_code == 409
+    assert _names() == ["Games"]
+
+
+def test_a_note_racing_a_create_still_saves_and_leaves_one_folder(monkeypatch):
+    folders.ensure_folder_indexes()
+    assert client.post("/folders/", json={"name": "Games"}, headers=AS_A).status_code == 200
+    monkeypatch.setattr(folders, "_exists", lambda user_id, name: False)
+    res = client.post("/notes/", json={"content": "chess", "list_name": "Games"}, headers=AS_A)
+    assert res.status_code == 200
+    assert _names() == ["Games"]

@@ -1,8 +1,13 @@
-from fastapi.testclient import TestClient
+import threading
 
+import pytest
+from fastapi.testclient import TestClient
+from pymongo.errors import DuplicateKeyError
+
+import places
 from api.main import app
 from agents.pipeline import process_new_notes
-from notepad import Note
+from notepad import Note, notes_collection
 from places import (
     create_place, delete_place, get_places, places_collection,
     resolve_place, update_place,
@@ -206,3 +211,180 @@ def test_location_override_by_name_is_stored_as_id():
     delete_any(note_id)
     assert note["location_value"] == work["id"]
     assert work["id"] in note["contexts"]
+
+
+# ---- default places can't be duplicated ----
+
+def _kinds(user_id):
+    return sorted(d["kind"] for d in places_collection.find({"user_id": user_id, "kind": {"$type": "string"}}))
+
+
+def _drop_default_index():
+    if places.DEFAULT_KIND_INDEX in places_collection.index_information():
+        places_collection.drop_index(places.DEFAULT_KIND_INDEX)
+
+
+def test_many_first_requests_at_once_seed_each_default_once():
+    places.ensure_place_indexes()
+    for n in range(5):
+        user = f"dup-race-{n}"
+        _clear(user)
+        start = threading.Barrier(8)
+        errors = []
+
+        def first_request():
+            start.wait()
+            try:
+                get_places(user)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=first_request) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert errors == []
+        assert _kinds(user) == ["home", "uni", "work"]
+        _clear(user)
+
+
+def test_a_second_default_is_refused_by_the_database():
+    places.ensure_place_indexes()
+    user = "dup-index"
+    _clear(user)
+    get_places(user)
+    with pytest.raises(DuplicateKeyError):
+        places_collection.insert_one({"_id": "dup-index-home-2", "user_id": user, "name": "Home",
+                                      "keywords": [], "kind": "home", "order": 0})
+    # custom places (no kind) are not limited
+    create_place(user, "Gym")
+    create_place(user, "Pool")
+    _clear(user)
+
+
+def test_seeding_ignores_a_default_another_request_just_created(monkeypatch):
+    def already_there(*args, **kwargs):
+        raise DuplicateKeyError("E11000 duplicate key")
+
+    monkeypatch.setattr(places.places_collection, "update_one", already_there)
+    places._seed_defaults("dup-seed")  # doesn't raise
+
+
+DUP_A, DUP_B, DUP_C = "dup-user-a", "dup-user-b", "dup-user-c"
+
+
+def _place(pid, user, name, kind, keywords=(), order=0):
+    places_collection.insert_one({"_id": pid, "user_id": user, "name": name,
+                                  "keywords": list(keywords), "kind": kind, "order": order})
+
+
+def _tagged_note(nid, user, place_id, explicit=False):
+    notes_collection.insert_one({"_id": nid, "user_id": user, "content": "buy milk",
+                                 "contexts": [place_id, "09:00"], "location_value": place_id,
+                                 "location_explicit": explicit})
+
+
+def _clear_dup_users():
+    for user in (DUP_A, DUP_B, DUP_C):
+        _clear(user)
+        notes_collection.delete_many({"user_id": user})
+
+
+@pytest.fixture
+def duplicates():
+    _drop_default_index()
+    _clear_dup_users()
+    # user A: two Home copies (the second renamed, with a keyword), three Uni copies
+    _place("a-home-1", DUP_A, "Home", "home", order=0)
+    _place("a-home-2", DUP_A, "My flat", "home", keywords=["flat"], order=0)
+    _place("a-uni-1", DUP_A, "Uni", "uni", order=1)
+    _place("a-uni-2", DUP_A, "Uni", "uni", keywords=["campus"], order=1)
+    _place("a-uni-3", DUP_A, "Uni", "uni", keywords=["campus", "lab"], order=1)
+    _place("a-work-1", DUP_A, "Work", "work", order=2)
+    _place("a-gym", DUP_A, "Gym", None, order=3)
+    _place("a-gym-2", DUP_A, "Gym 2", None, order=4)
+    # user B: only one copy of each
+    _place("b-home", DUP_B, "Home", "home", order=0)
+    _place("b-uni", DUP_B, "Uni", "uni", order=1)
+    _place("b-work", DUP_B, "Work", "work", order=2)
+    _tagged_note("a-note-home", DUP_A, "a-home-1", explicit=True)
+    _tagged_note("a-note-uni", DUP_A, "a-uni-1")
+    notes_collection.insert_one({"_id": "a-note-both", "user_id": DUP_A, "content": "x",
+                                 "contexts": ["a-home-1", "a-home-2"], "location_value": None,
+                                 "location_explicit": False})
+    _tagged_note("a-note-gym", DUP_A, "a-gym")
+    _tagged_note("b-note", DUP_B, "b-home")
+    yield
+    _clear_dup_users()
+    places.ensure_place_indexes()
+
+
+def _ids(user, kind):
+    return sorted(d["_id"] for d in places_collection.find({"user_id": user, "kind": kind}))
+
+
+def test_dedupe_keeps_the_renamed_copy_and_merges_keywords(duplicates):
+    places.dedupe_default_places()
+    assert _ids(DUP_A, "home") == ["a-home-2"]
+    home = places_collection.find_one({"_id": "a-home-2"})
+    assert home["name"] == "My flat"
+    assert home["keywords"] == ["flat"]
+    uni_ids = _ids(DUP_A, "uni")
+    assert len(uni_ids) == 1
+    assert sorted(places_collection.find_one({"_id": uni_ids[0]})["keywords"]) == ["campus", "lab"]
+    assert _ids(DUP_A, "work") == ["a-work-1"]
+
+
+def test_dedupe_retags_notes_from_removed_copies(duplicates):
+    places.dedupe_default_places()
+    kept_uni = _ids(DUP_A, "uni")[0]
+    home_note = notes_collection.find_one({"_id": "a-note-home"})
+    assert home_note["contexts"] == ["a-home-2", "09:00"]
+    assert home_note["location_value"] == "a-home-2"
+    assert home_note["location_explicit"] is True
+    uni_note = notes_collection.find_one({"_id": "a-note-uni"})
+    assert uni_note["contexts"] == [kept_uni, "09:00"]
+    assert uni_note["location_value"] == kept_uni
+    assert uni_note["location_explicit"] is False
+    # tagged with two copies: one tag left
+    assert notes_collection.find_one({"_id": "a-note-both"})["contexts"] == ["a-home-2"]
+
+
+def test_dedupe_without_edits_keeps_the_copy_with_most_notes_then_the_lowest_id():
+    _drop_default_index()
+    _clear_dup_users()
+    _place("c-home-1", DUP_C, "Home", "home")
+    _place("c-home-2", DUP_C, "Home", "home")
+    _tagged_note("c-note", DUP_C, "c-home-2")
+    _place("c-uni-2", DUP_C, "Uni", "uni", order=1)
+    _place("c-uni-1", DUP_C, "Uni", "uni", order=1)
+    try:
+        places.dedupe_default_places()
+        assert _ids(DUP_C, "home") == ["c-home-2"]
+        assert _ids(DUP_C, "uni") == ["c-uni-1"]
+    finally:
+        _clear_dup_users()
+        places.ensure_place_indexes()
+
+
+def test_dedupe_leaves_custom_places_and_other_users_alone_and_is_idempotent(duplicates):
+    users = {"user_id": {"$in": [DUP_A, DUP_B]}}
+    b_places = list(places_collection.find({"user_id": DUP_B}).sort("_id", 1))
+    b_notes = list(notes_collection.find({"user_id": DUP_B}).sort("_id", 1))
+    assert places.dedupe_default_places() == 3  # user A's extra Home and 2 extra Uni copies
+    assert _ids(DUP_A, None) == ["a-gym", "a-gym-2"]
+    assert notes_collection.find_one({"_id": "a-note-gym"})["contexts"] == ["a-gym", "09:00"]
+    assert list(places_collection.find({"user_id": DUP_B}).sort("_id", 1)) == b_places
+    assert list(notes_collection.find({"user_id": DUP_B}).sort("_id", 1)) == b_notes
+    places_after = list(places_collection.find(users).sort("_id", 1))
+    notes_after = list(notes_collection.find(users).sort("_id", 1))
+    assert places.dedupe_default_places() == 0
+    assert list(places_collection.find(users).sort("_id", 1)) == places_after
+    assert list(notes_collection.find(users).sort("_id", 1)) == notes_after
+
+
+def test_index_setup_merges_old_duplicates_first_so_startup_works(duplicates):
+    places.ensure_place_indexes()
+    assert places.DEFAULT_KIND_INDEX in places_collection.index_information()
+    assert _kinds(DUP_A) == ["home", "uni", "work"]
