@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import re  # noqa: E402
+from datetime import date  # noqa: E402
 from typing import Annotated, List, Union  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr  # noqa: E402
 from fastapi import Body, FastAPI, Header, HTTPException, Query  # noqa: E402
@@ -36,6 +37,7 @@ from folders import (  # noqa: E402
     set_folder_order,
 )
 import ratelimit  # noqa: E402
+from agents.clock import local_now  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -221,6 +223,7 @@ def create_note(
 ):
     user_id = require_user_id(authorization)
     enforce_limit(NOTE_WRITE_LIMIT, user_id, "changes")
+    _check_remind_date(request.remind_on_date)
     note = Note(
         content=request.content,
         list_name=_note_folder(request.list_name),
@@ -288,6 +291,19 @@ def _whole_number(value, name: str, low: int, high: int) -> Optional[int]:
     if not low <= value <= high:
         raise HTTPException(status_code=422, detail=f"{name} must be between {low} and {high}")
     return value
+
+
+def _check_remind_date(value: Optional[str]) -> None:
+    """A reminder date is YYYY-MM-DD and not a day that has already passed
+    (the user's local day), or 422. Empty means none."""
+    if not value:
+        return
+    try:
+        day = date.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="remind_on_date must be a date (YYYY-MM-DD)")
+    if day < local_now().date():
+        raise HTTPException(status_code=422, detail="That date has already passed. Pick today or a later day.")
 
 
 # fields whose change re-runs the AI enrichment (category, place, time, date)
@@ -368,6 +384,12 @@ def change_note(
         }
         values = {k: v for k, v in query.items() if v is not None}
     fields = _note_fields(values)
+    if fields.get("remind_on_date"):
+        # the edit screen sends the saved date back on every save, so an old
+        # note can keep a date that has passed; only a new date is checked
+        saved = get_note_by_id(note_id, user_id=user_id)
+        if saved and saved.get("remind_on_date") != fields["remind_on_date"]:
+            _check_remind_date(fields["remind_on_date"])
     matched = update_note(note_id, fields, user_id=user_id)
     if matched == 0:
         raise HTTPException(status_code=404, detail="Note not found")
