@@ -29,11 +29,18 @@ const NOTE = {
   created_at: "2026-10-04T09:00:00",
 } as unknown as Note;
 
-async function renderCard(onDelete: jest.Mock, note: Note = NOTE) {
+async function renderCard(onDelete: jest.Mock, note: Note = NOTE, onDone?: jest.Mock) {
   let tree!: ReactTestRenderer;
   await act(async () => {
     tree = TestRenderer.create(
-      <NoteCard note={note} onPress={jest.fn()} onDelete={onDelete} places={[]} categoryColors={DEFAULT_CATEGORY_COLORS} />
+      <NoteCard
+        note={note}
+        onPress={jest.fn()}
+        onDelete={onDelete}
+        onDone={onDone}
+        places={[]}
+        categoryColors={DEFAULT_CATEGORY_COLORS}
+      />
     );
   });
   return tree;
@@ -61,6 +68,42 @@ test("long-press deletes the same way, with no confirmation", async () => {
   await act(async () => card.props.onLongPress());
   expect(onDelete).toHaveBeenCalledTimes(1);
   expect(alertSpy).not.toHaveBeenCalled();
+});
+
+describe("the done checkbox on to-do notes", () => {
+  const checkbox = (tree: ReactTestRenderer) =>
+    tree.root.findAllByType(TouchableOpacity).find((t) => t.props.accessibilityLabel === "Mark done");
+
+  test("a to-do note has an empty checkbox; tapping it marks the note done (not a plain delete)", async () => {
+    const onDelete = jest.fn();
+    const onDone = jest.fn();
+    const tree = await renderCard(onDelete, { ...NOTE, category: "todo" } as Note, onDone);
+    const box = checkbox(tree)!;
+    expect(box.props.accessibilityRole).toBe("checkbox");
+    expect(box.props.accessibilityState).toEqual({ checked: false });
+    expect(box.findAll((n) => n.props.name === "ellipse-outline").length).toBeGreaterThan(0);
+    await act(async () => box.props.onPress());
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  test("old kinds that count as To-do (task, no category) get the checkbox too", async () => {
+    for (const category of ["task", undefined]) {
+      const tree = await renderCard(jest.fn(), { ...NOTE, category } as Note, jest.fn());
+      expect(checkbox(tree)).toBeDefined();
+    }
+  });
+
+  test.each(["errand", "idea", "event"])("a %s note has no checkbox", async (category) => {
+    const tree = await renderCard(jest.fn(), { ...NOTE, category } as Note, jest.fn());
+    expect(checkbox(tree)).toBeUndefined();
+  });
+
+  test("no checkbox when the screen doesn't handle done", async () => {
+    const tree = await renderCard(jest.fn(), { ...NOTE, category: "todo" } as Note);
+    expect(checkbox(tree)).toBeUndefined();
+  });
 });
 
 test.each(CATEGORIES.map((c) => [c]))("the %s label on the card is drawn in its category color", async (category) => {

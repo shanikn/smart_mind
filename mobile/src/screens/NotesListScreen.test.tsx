@@ -74,10 +74,17 @@ jest.mock("../lib/reminderPrefs", () => ({ getReminderLocation: jest.fn().mockRe
 // long-press stands for a confirmed delete (swipe -> Delete -> Delete)
 jest.mock("../components/NoteCard", () => {
   const { Text } = require("react-native");
-  return ({ note, onDelete }: { note: { content: string }; onDelete: () => void }) => (
-    <Text testID="note-card" onLongPress={onDelete}>
-      {note.content}
-    </Text>
+  return ({ note, onDelete, onDone }: { note: { content: string }; onDelete: () => void; onDone?: () => void }) => (
+    <>
+      <Text testID="note-card" onLongPress={onDelete}>
+        {note.content}
+      </Text>
+      {onDone && (
+        <Text testID="note-done" onPress={onDone}>
+          {note.content}
+        </Text>
+      )}
+    </>
   );
 });
 
@@ -803,6 +810,64 @@ describe("Undo after deleting a note", () => {
     expect(hasUndoBar(tree)).toBe(true);
     await act(async () => byLabel(tree, "Undo").props.onPress());
     expect(shownNotes(tree)).toEqual(["Buy milk"]);
+  });
+});
+
+describe("ticking a to-do as done", () => {
+  const { deleteNote } = jest.requireMock("../api/notes");
+  const tick = async (tree: ReactTestRenderer, content: string) => {
+    const box = tree.root.findAll(
+      (n) => n.props.testID === "note-done" && n.props.children === content && typeof n.props.onPress === "function"
+    )[0];
+    await act(async () => box.props.onPress());
+  };
+  const wait = async (ms: number) =>
+    act(async () => {
+      jest.advanceTimersByTime(ms);
+    });
+
+  beforeEach(async () => {
+    jest.useFakeTimers({ doNotFake: ["queueMicrotask", "nextTick", "setImmediate"] });
+    deleteNote.mockReset();
+    deleteNote.mockResolvedValue({ message: "ok" });
+    await finishPendingDelete();
+    deleteNote.mockClear();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  test("the note goes away with a 'Marked done' bar, and is deleted after 5 seconds", async () => {
+    const tree = await renderScreen();
+    await tick(tree, "Study for the exam");
+    expect(shownNotes(tree)).not.toContain("Study for the exam");
+    expect(allText(tree)).toContain("Marked done");
+    expect(allText(tree)).not.toContain("Note deleted");
+    await wait(5000);
+    expect(deleteNote).toHaveBeenCalledWith("b");
+    expect(shownNotes(tree)).not.toContain("Study for the exam");
+  });
+
+  test("Undo brings the to-do back and nothing is deleted", async () => {
+    const tree = await renderScreen();
+    const before = shownNotes(tree);
+    await tick(tree, "Study for the exam");
+    await act(async () => byLabel(tree, "Undo").props.onPress());
+    expect(shownNotes(tree)).toEqual(before);
+    await wait(10000);
+    expect(deleteNote).not.toHaveBeenCalled();
+  });
+
+  test("a plain delete after a done still says 'Note deleted'", async () => {
+    const tree = await renderScreen();
+    await tick(tree, "Study for the exam");
+    const card = tree.root.findAll(
+      (n) => n.props.testID === "note-card" && n.props.children === "Buy milk" && typeof n.props.onLongPress === "function"
+    )[0];
+    await act(async () => card.props.onLongPress());
+    expect(allText(tree)).toContain("Note deleted");
+    expect(allText(tree)).not.toContain("Marked done");
   });
 });
 
