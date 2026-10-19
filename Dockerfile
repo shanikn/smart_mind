@@ -11,7 +11,7 @@ ENV HF_HOME=/opt/huggingface
 RUN mkdir -p /opt/huggingface && chown app:app /opt/huggingface
 
 COPY requirements.txt .
-RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install torch==2.14.1+cpu --index-url https://download.pytorch.org/whl/cpu
 RUN pip install -r requirements.txt
 
 # Pre-download the model before copying code — cached as its own layer,

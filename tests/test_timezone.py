@@ -77,7 +77,7 @@ def test_tzdata_is_a_requirement():
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[1]
     lines = [ln.strip().lower() for ln in (root / "requirements.txt").read_text().splitlines()]
-    assert "tzdata" in lines  # zoneinfo needs it in the slim Docker image (and on Windows)
+    assert any(ln.startswith("tzdata") for ln in lines)  # zoneinfo needs it in the slim Docker image (and on Windows)
 
 
 # ---- "today" and the current hour for reminders ----
