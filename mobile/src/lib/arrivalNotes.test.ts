@@ -97,16 +97,27 @@ describe("arrivalCandidates (notes to show when you arrive at a place)", () => {
     expect(arrivalCandidates([timed, plain]).map((x) => x._id)).toEqual([plain._id]);
   });
 
-  test("…unless the note is about arriving", () => {
+  test("…even when the note is about arriving: the time comes first", () => {
     for (const content of [
       "when I get home at 18:00 water the plants",
       "on arrival at 9:00 sign in at the front desk",
       "when I arrive at uni at 10:00 print the slides",
       "once I'm home at 20:00 call dad",
+      "remind me when I'm home at 15:30 to call the bank",
     ]) {
       const x = note({ content, contexts: ["id-home", "18:00"], reminder_time_source: "text" });
-      expect(arrivalCandidates([x])).toEqual([x]);
+      expect(arrivalCandidates([x])).toEqual([]);
     }
+  });
+
+  test("a time the user set beats arriving too", () => {
+    const x = note({ content: "when I get home call mom", contexts: ["id-home", "15:30"], reminder_time_source: "explicit", remind_time_explicit: true, remind_at_hour: 15, remind_at_minute: 30 });
+    expect(arrivalCandidates([x])).toEqual([]);
+  });
+
+  test("an arrival note with no time still alerts on arrival", () => {
+    const x = note({ content: "when I get home call mom", contexts: ["id-home"], reminder_time_source: null });
+    expect(arrivalCandidates([x])).toEqual([x]);
   });
 
   test("every arrival note is kept (even past 3), first; other notes only fill up to 3", () => {

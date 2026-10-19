@@ -97,6 +97,18 @@ describe("arrival notes ('when I get home ...') and ties, like the server", () =
     ]);
   });
 
+  test("arrival notes with a time wait for it, so they don't take the place of other notes", () => {
+    const timed = (content: string, day: number) =>
+      note(content, { created_at: at(day), contexts: [HOME, "20:00"], reminder_time_source: "text" });
+    const notes = [
+      note("water the plants", { created_at: at(5) }),
+      timed("when I get home at 20:00 call dad", 2),
+      timed("once I'm home at 20:00 feed the cat", 3),
+      timed("when I'm home at 20:00 call the bank", 4),
+    ];
+    expect(ids(offlineReminders(notes, HOME, NOW))[0]).toBe("water the plants");
+  });
+
   test("equal scores: newest first; a higher score still wins", () => {
     const notes = [
       note("oldest", { created_at: at(1) }),

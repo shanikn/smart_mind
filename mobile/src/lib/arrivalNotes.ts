@@ -2,8 +2,9 @@ import { Note } from "../types/notes";
 import { canAlert } from "./alertRules";
 
 // Which notes to show when you arrive at a place. A note with a specific
-// time ("remind me I'm home at 17:54") waits for that time and its exact
-// alarm, unless it's about arriving ("when I get home at 18:00 ...").
+// time waits for that time and its exact alarm, even when it's about
+// arriving: "when I'm home at 15:30 ..." alerts at 15:30 (if you're home),
+// not whenever you walk in.
 
 export const MAX_ARRIVAL_NOTES = 3;
 
@@ -34,18 +35,20 @@ export function isAboutArriving(note: Note): boolean {
   return ARRIVAL_WORDS.test(note.content) || ARRIVAL_WORDS_HEBREW.test(note.content);
 }
 
+// about arriving and no time of its own: the arrival is its moment
+function alertsOnArrival(note: Note): boolean {
+  return isAboutArriving(note) && !hasSpecificTime(note);
+}
+
 // Notes about arriving first, every one of them (they're why you came);
 // other notes fill up to `max`. Otherwise keeps the given order (the
 // backend's ranking).
 export function arriveFirst(notes: Note[], max: number = MAX_ARRIVAL_NOTES): Note[] {
-  const arriving = notes.filter(isAboutArriving);
-  const others = notes.filter((n) => !isAboutArriving(n));
+  const arriving = notes.filter(alertsOnArrival);
+  const others = notes.filter((n) => !alertsOnArrival(n));
   return [...arriving, ...others.slice(0, Math.max(0, max - arriving.length))];
 }
 
 export function arrivalCandidates(notes: Note[], max: number = MAX_ARRIVAL_NOTES): Note[] {
-  return arriveFirst(
-    notes.filter(canAlert).filter((n) => !hasSpecificTime(n) || isAboutArriving(n)),
-    max
-  );
+  return arriveFirst(notes.filter(canAlert).filter((n) => !hasSpecificTime(n)), max);
 }
