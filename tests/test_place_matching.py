@@ -99,6 +99,7 @@ def test_the_users_example_therapist_means_the_therapy_place():
     ("Library", "return books to the librarian"),
     ("Bakery", "tell the baker we need a cake"),
     ("Baker", "bread from the bakery"),
+    ("Grocer", "grocery list"),
     ("My Therapist", "therapy at 5"),
     ("Pharmacist", "pharmacy run"),
 ])
@@ -111,6 +112,8 @@ def test_a_place_word_and_its_person_match_both_ways(name, text):
     ("Therapy", "therapeutic music"),
     ("Pharmacy", "pharmacies nearby"),   # plurals aren't matched (see "evyatars")
     ("Gym", "gymnast practice"),
+    ("Water", "the soup is watery"),   # only real shops: baker/bakery, grocer/grocery
+    ("Battery", "make the batter"),
 ])
 def test_other_word_forms_still_dont_match(name, text):
     place = Place(id="p-x", user_id=None, name=name)

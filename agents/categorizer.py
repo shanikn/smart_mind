@@ -430,6 +430,8 @@ def _tokens(text: str) -> list:
 
 
 MIN_FAMILY_WORD = 5
+# people whose place is the word + "y"; a list, since most "-er" words aren't ("water")
+_ERY_PEOPLE = frozenset({"baker", "grocer", "brewer", "butcher"})
 
 
 def _person_forms(word: str) -> set:
@@ -440,16 +442,15 @@ def _person_forms(word: str) -> set:
     if word.endswith("y"):  # therapy -> therapist(s), library -> librarian(s)
         base = word[:-1]
         forms |= {base + "ist", base + "ists", base + "ian", base + "ians"}
-        if word.endswith("ery"):  # bakery -> baker(s)
+        if base in _ERY_PEOPLE:  # bakery -> baker(s)
             forms |= {base, base + "s"}
     for ending in ("ists", "ist", "ians", "ian"):  # therapist -> therapy
         if word.endswith(ending):
             forms.add(word[:-len(ending)] + "y")
             break
-    for ending in ("ers", "er"):  # baker -> bakery
-        if word.endswith(ending):
-            forms.add(word[:-len(ending)] + "ery")
-            break
+    person = word[:-1] if word.endswith("s") else word
+    if person in _ERY_PEOPLE:  # baker -> bakery
+        forms.add(person + "y")
     return forms
 
 
