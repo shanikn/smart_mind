@@ -412,7 +412,10 @@ def _semantic_match(content: str, places: list):
 # that's at least 3 letters long, or one of its keywords; whole words only,
 # any capitals ("Evyatar's" is "evyatar" + "s"). Hebrew attaches up to three
 # prefix letters to a word (ו ה ב ל מ ש כ: "לשדרות", "ובשדרות"); they're
-# stripped only when the rest is a whole word of a place name. The place
+# stripped only when the rest is a whole word of a place name. An English
+# place word also matches the person (or people) who work there and back
+# ("Therapy" / "therapist(s)", "Pharmacy" / "pharmacist", "Library" /
+# "librarian", "Bakery" / "baker"); other word forms don't ("evyatars"). The place
 # with the most matching words wins; then a full-name match; then the
 # user's own places over Home/Uni/Work; then the order of the places.
 
@@ -426,9 +429,35 @@ def _tokens(text: str) -> list:
     return re.findall(r"\w+", text.lower())
 
 
+MIN_FAMILY_WORD = 5
+# people whose place is the word + "y"; a list, since most "-er" words aren't ("water")
+_ERY_PEOPLE = frozenset({"baker", "grocer", "brewer", "butcher"})
+
+
+def _person_forms(word: str) -> set:
+    """English words for the person at a place word, and the place for a person word."""
+    if len(word) < MIN_FAMILY_WORD or not word.isascii():
+        return set()
+    forms = set()
+    if word.endswith("y"):  # therapy -> therapist(s), library -> librarian(s)
+        base = word[:-1]
+        forms |= {base + "ist", base + "ists", base + "ian", base + "ians"}
+        if base in _ERY_PEOPLE:  # bakery -> baker(s)
+            forms |= {base, base + "s"}
+    for ending in ("ists", "ist", "ians", "ian"):  # therapist -> therapy
+        if word.endswith(ending):
+            forms.add(word[:-len(ending)] + "y")
+            break
+    person = word[:-1] if word.endswith("s") else word
+    if person in _ERY_PEOPLE:  # baker -> bakery
+        forms.add(person + "y")
+    return forms
+
+
 def _token_is(token: str, word: str) -> bool:
-    """The note's token is this name word, maybe with Hebrew prefixes."""
-    if token == word:
+    """The note's token is this name word, maybe with Hebrew prefixes,
+    or the English person/place form of it."""
+    if token == word or token in _person_forms(word):
         return True
     if not _HEBREW_LETTER.match(word) or not token.endswith(word):
         return False
