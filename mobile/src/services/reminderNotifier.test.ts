@@ -50,6 +50,12 @@ test("online: the server's choice is shown", async () => {
   expect(result.offline).toBe(false);
 });
 
+test("the notification carries the Done / Later / Not useful buttons", async () => {
+  fromServer.mockResolvedValue([note("s1", "from the server")]);
+  await checkAndNotifyReminders({ onArrival: true });
+  expect(notify.mock.calls[0][0].content.categoryIdentifier).toBe("note-reminder");
+});
+
 test("offline: the notes saved at the last sync for this place are shown", async () => {
   await saveAlertNotes([note("c1", "water the plants"), note("c2", "gym bag", { contexts: ["id-gym"] })], "uid-a");
   fromServer.mockRejectedValue(new TypeError("Network request failed"));

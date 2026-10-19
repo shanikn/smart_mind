@@ -22,6 +22,13 @@ test("a short link is followed by the server", async () => {
   expect(resolveLink).toHaveBeenCalledWith("https://maps.app.goo.gl/AbC123");
 });
 
+test("a link with only an address is looked up by the server", async () => {
+  resolveLink.mockResolvedValue({ latitude: 32.0637, longitude: 34.7741 });
+  const link = "https://maps.google.com/?q=Rothschild+10,+Tel+Aviv&ftid=0x151d4b:0x2ab4";
+  expect(await resolvePastedLocation(link)).toEqual({ latitude: 32.0637, longitude: 34.7741 });
+  expect(resolveLink).toHaveBeenCalledWith(link);
+});
+
 const errorFor = async (text: string) => {
   try {
     await resolvePastedLocation(text);
@@ -39,7 +46,7 @@ test("clear messages for what can't be used", async () => {
   );
   resolveLink.mockRejectedValueOnce(new ApiError(422, JSON.stringify({ detail: { kind: "no_coordinates" } })));
   expect(await errorFor("https://maps.app.goo.gl/x")).toBe(
-    "This link has no coordinates. In Google Maps, drop a pin and share that instead."
+    "Couldn't find this place from the link. In Google Maps, drop a pin and share that instead."
   );
   resolveLink.mockRejectedValueOnce(new ApiError(404, "Not Found"));
   expect(await errorFor("https://maps.app.goo.gl/x")).toBe(

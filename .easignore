@@ -1,0 +1,63 @@
+# EAS Build upload rules. This file replaces .gitignore for EAS,
+# so it repeats the .gitignore rules with full paths from the repo root.
+
+# --- from the root .gitignore ---
+venv/
+__pycache__/
+*.db
+.env
+chroma_db/
+chroma_db_test/
+.pytest_cache/
+CLAUDE.md
+.vscode/
+.claude/
+*adminsdk*.json
+firebase-credentials.json
+htmlcov/
+claudes_plan.md
+.coverage
+
+# --- from mobile/.gitignore ---
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/expo-env.d.ts
+mobile/.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+.env*.local
+*.tsbuildinfo
+mobile/ios/
+mobile/android/
+mobile/scripts/icon-previews/
+
+# --- not needed to build the phone app (Python backend and site) ---
+/agents/
+/api/
+/tests/
+/docs/
+/store/
+/scripts/
+/backups/
+/*.py
+/requirements.txt
+/pytest.ini
+/Dockerfile
+/docker-compose.yml
+/.dockerignore
+/.pre-commit-config.yaml
+/redesign.md
+*.patch
+*.log

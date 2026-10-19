@@ -14,7 +14,7 @@ export async function getReminders(
 
 export async function sendFeedback(
   noteId: string,
-  action: "useful" | "later" | "annoying"
+  action: "useful" | "dismiss" | "later" | "annoying"
 ): Promise<{ message: string }> {
   return apiRequest(`/notes/${noteId}/feedback?action=${action}`, {
     method: "POST",

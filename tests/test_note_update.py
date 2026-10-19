@@ -1,9 +1,12 @@
 """PUT /notes/{id}: a JSON body (current app) or query parameters (older
 app versions), validated the same way."""
+from datetime import timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
 import api.main as main
+from agents.clock import local_now
 from notepad import notes_collection
 from tests.support import delete_any, note_doc
 
@@ -11,6 +14,8 @@ client = TestClient(main.app)
 TOKENS = {"Bearer token-a": "upd-user-a", "Bearer token-b": "upd-user-b"}
 AS_A = {"Authorization": "Bearer token-a"}
 AS_B = {"Authorization": "Bearer token-b"}
+# a reminder date can't be in the past, so tests use one a week ahead
+LATER = (local_now().date() + timedelta(days=7)).isoformat()
 
 
 @pytest.fixture
@@ -34,7 +39,7 @@ def test_json_body_updates_the_note(note_id):
             "remind_at_hour": 18,
             "remind_at_minute": 30,
             "remind_date_explicit": True,
-            "remind_on_date": "2026-10-09",
+            "remind_on_date": LATER,
             "reminders_enabled": False,
         },
         headers=AS_A,
@@ -44,7 +49,7 @@ def test_json_body_updates_the_note(note_id):
     assert doc["content"] == "buy milk"
     assert doc["list_name"] == "Errands"
     assert (doc["remind_at_hour"], doc["remind_at_minute"]) == (18, 30)
-    assert doc["remind_on_date"] == "2026-10-09"
+    assert doc["remind_on_date"] == LATER
     assert doc["reminders_enabled"] is False
     assert doc["category"] == "errand"  # content changed: re-enriched
 
@@ -65,7 +70,7 @@ def test_json_contexts_as_text_or_list(note_id, contexts):
 def test_json_empty_or_null_clears(note_id, empty):
     client.put(
         f"/notes/{note_id}",
-        json={"remind_at_hour": 9, "remind_on_date": "2026-10-09", "location_value": "Home"},
+        json={"remind_at_hour": 9, "remind_on_date": LATER, "location_value": "Home"},
         headers=AS_A,
     )
     res = client.put(
@@ -133,7 +138,7 @@ def test_query_parameters_still_work(note_id):
 
 
 def test_query_empty_strings_clear(note_id):
-    client.put(f"/notes/{note_id}", params={"remind_at_hour": "9", "remind_on_date": "2026-10-09"}, headers=AS_A)
+    client.put(f"/notes/{note_id}", params={"remind_at_hour": "9", "remind_on_date": LATER}, headers=AS_A)
     client.put(f"/notes/{note_id}", params={"remind_at_hour": "", "remind_on_date": ""}, headers=AS_A)
     doc = note_doc(note_id)
     assert doc["remind_at_hour"] is None

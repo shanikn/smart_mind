@@ -107,6 +107,20 @@ def test_nearby_and_links_are_separate_budgets(limits_on, monkeypatch):
     assert res.status_code == 200
 
 
+def test_a_link_looked_up_by_address_uses_the_search_budget(limits_on, monkeypatch):
+    import maps_links
+
+    def no_coordinates(url):
+        raise maps_links.LinkError("no_coordinates", place_text="Rothschild 10, Tel Aviv")
+
+    monkeypatch.setattr(main.maps_links, "resolve", no_coordinates)
+    monkeypatch.setattr(main.geocode, "search", lambda q, lat=None, lon=None: [{"latitude": 32.06, "longitude": 34.77}])
+    _hit(30, lambda: client.get("/places/search", params={"q": "x"}, headers=AS_A))
+    res = client.get("/places/resolve-link", params={"url": "https://maps.app.goo.gl/x"}, headers=AS_A)
+    assert res.status_code == 429
+    assert res.json()["detail"]["message"] == "Too many searches, try again in a minute."
+
+
 def test_note_create_and_update_60_a_minute_together(limits_on, monkeypatch):
     monkeypatch.setattr(main, "save_note", lambda note: None)
     monkeypatch.setattr(main, "enrich_note", lambda note: None)

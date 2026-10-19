@@ -123,17 +123,82 @@ test("a time picked in the Time tile is saved (not a stale value)", async () => 
   );
 });
 
+// a day `offset` days from today (local), and its YYYY-MM-DD form
+function dayFromToday(offset: number): Date {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + offset);
+}
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 test("a date picked in the Date tile is saved", async () => {
   const tree = await renderScreen({ note: EXISTING });
   await press(tree, "Date");
+  const later = dayFromToday(3);
   await act(async () => {
-    tree.root.findByProps({ testID: "picker-date" }).props.onChange({ type: "set" }, new Date(2026, 9, 7));
+    tree.root.findByProps({ testID: "picker-date" }).props.onChange({ type: "set" }, later);
   });
   await press(tree, "Save");
   expect(updateNote).toHaveBeenCalledWith(
     "note-1",
-    expect.objectContaining({ remind_date_explicit: true, remind_on_date: "2026-10-07" })
+    expect.objectContaining({ remind_date_explicit: true, remind_on_date: ymd(later) })
   );
+});
+
+describe("no alerts in the past", () => {
+  test("the date picker starts at today", async () => {
+    const tree = await renderScreen({ note: EXISTING });
+    await press(tree, "Date");
+    expect(tree.root.findByProps({ testID: "picker-date" }).props.minimumDate).toEqual(dayFromToday(0));
+  });
+
+  test("a day before today is not saved; the user is told why", async () => {
+    const { Alert } = require("react-native");
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const tree = await renderScreen({ note: EXISTING });
+    await press(tree, "Date");
+    await act(async () => {
+      tree.root.findByProps({ testID: "picker-date" }).props.onChange({ type: "set" }, dayFromToday(-1));
+    });
+    await press(tree, "Save");
+    expect(alert).toHaveBeenCalledWith("Pick a later date", expect.stringMatching(/date has already passed/));
+    expect(updateNote).not.toHaveBeenCalled();
+    expect(mockNavigation.goBack).not.toHaveBeenCalled();
+    alert.mockRestore();
+  });
+
+  test("a new note dated yesterday is not created", async () => {
+    const { Alert } = require("react-native");
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const tree = await renderScreen();
+    await act(async () => {
+      tree.root.findByType(TextInput).props.onChangeText("buy milk");
+    });
+    await press(tree, "Date");
+    await act(async () => {
+      tree.root.findByProps({ testID: "picker-date" }).props.onChange({ type: "set" }, dayFromToday(-1));
+    });
+    await press(tree, "Save");
+    expect(alert).toHaveBeenCalled();
+    expect(createNote).not.toHaveBeenCalled();
+    alert.mockRestore();
+  });
+
+  test("an old note keeps its past date when only the text is edited", async () => {
+    const past = ymd(dayFromToday(-5));
+    const tree = await renderScreen({
+      note: { ...EXISTING, remind_date_explicit: true, remind_on_date: past },
+    });
+    await act(async () => {
+      tree.root.findByType(TextInput).props.onChangeText("go for a long jog");
+    });
+    await press(tree, "Save");
+    expect(updateNote).toHaveBeenCalledWith(
+      "note-1",
+      expect.objectContaining({ content: "go for a long jog", remind_on_date: past })
+    );
+  });
 });
 
 test("Reset to Smart clears the explicit date and time", async () => {

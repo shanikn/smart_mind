@@ -16,6 +16,7 @@ import { currentUserId } from "../api/client";
 import { readAlertNotes } from "./alertNotesCache";
 import { needsToBeThere } from "../lib/notePlace";
 import { trackedPlaceIds } from "./placeState";
+import { NOTE_REMINDER_CATEGORY } from "../lib/notificationActions";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -174,6 +175,7 @@ export async function checkAndNotifyReminders(
           category: note.category,
           listName: note.list_name,
         },
+        categoryIdentifier: NOTE_REMINDER_CATEGORY,
       },
       trigger: null,
     });

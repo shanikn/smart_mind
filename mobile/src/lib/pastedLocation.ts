@@ -1,18 +1,19 @@
 import { LatLon } from "./geo";
 
 // What a pasted text means as a location: "lat, lon", a full Google Maps
-// link (the coordinates are in the URL), or a short share link
-// (maps.app.goo.gl, which only the server can follow). Same rules as the
-// backend's maps_links.py.
+// link (the coordinates are in the URL), or a link only the server can
+// answer: a short share link (maps.app.goo.gl) it follows, or a link with
+// just a place's name or address it looks up. Same rules as the backend's
+// maps_links.py.
 
 export type PastedLocation =
   | { kind: "point"; point: LatLon }
-  | { kind: "short"; url: string }
+  | { kind: "server"; url: string }
   | { kind: "invalid"; message: string }
   | { kind: "none" }; // not coordinates or a Maps link
 
 export const NO_COORDINATES_MESSAGE =
-  "This link has no coordinates. In Google Maps, drop a pin and share that instead.";
+  "Couldn't find this place from the link. In Google Maps, drop a pin and share that instead.";
 
 const NUM = "(-?\\d{1,3}(?:\\.\\d+)?)";
 const PIN = new RegExp(`!3d${NUM}!4d${NUM}`, "g"); // a place's pin
@@ -48,7 +49,7 @@ function fromMapsLink(link: string): PastedLocation {
   const text = decoded(link);
   const pins = [...text.matchAll(PIN)];
   const m = pins.length > 0 ? pins[pins.length - 1] : text.match(QUERY) ?? text.match(AT);
-  return m ? checked(Number(m[1]), Number(m[2])) : { kind: "invalid", message: NO_COORDINATES_MESSAGE };
+  return m ? checked(Number(m[1]), Number(m[2])) : { kind: "server", url: link };
 }
 
 export function parsePastedLocation(text: string): PastedLocation {
@@ -59,7 +60,7 @@ export function parsePastedLocation(text: string): PastedLocation {
   }
   const short = trimmed.match(SHORT_LINK);
   if (short) {
-    return { kind: "short", url: short[0] };
+    return { kind: "server", url: short[0] };
   }
   const link = trimmed.match(MAPS_LINK);
   if (link) {

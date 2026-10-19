@@ -24,6 +24,7 @@ import { deleteWithUndo } from "../services/pendingDelete";
 import { loadPlaces } from "../services/placesStore";
 import { ServerPlace } from "../lib/userPlaces";
 import { CATEGORIES, categoryLabel, normalizeCategory } from "../lib/categoryColors";
+import { pastReminder, startOfToday } from "../lib/reminderDate";
 import { Card, Chip, ChipRow, PrimaryButton, TextButton, ToggleRow } from "../components/ui";
 import { MIN_TOUCH_TARGET, Theme, fonts, spacing } from "../theme";
 import { useTheme, useThemedStyles } from "../ThemeContext";
@@ -164,6 +165,18 @@ export default function AddEditNoteScreen() {
 
     if (!trimmed) {
       Alert.alert("Error", "Note content cannot be empty");
+      return;
+    }
+
+    // an old note may keep a date that has passed; only a changed date or
+    // time is checked
+    const savedDate = existingNote?.remind_date_explicit ? existingNote.remind_on_date || "" : "";
+    const savedHour = existingNote?.remind_time_explicit ? existingNote.remind_at_hour ?? null : null;
+    const savedMinute = existingNote?.remind_time_explicit ? existingNote.remind_at_minute ?? null : null;
+    const changed = reminderDate !== savedDate || reminderHour !== savedHour || reminderMinute !== savedMinute;
+    const past = changed ? pastReminder(reminderDate ? selectedDate : null, reminderHour, reminderMinute) : null;
+    if (remindersEnabled && past) {
+      Alert.alert(past.title, past.message);
       return;
     }
 
@@ -309,6 +322,7 @@ export default function AddEditNoteScreen() {
             <DateTimePicker
               value={selectedDate ?? new Date()}
               mode="date"
+              minimumDate={startOfToday()}
               display={Platform.OS === "ios" ? "inline" : "default"}
               themeVariant={dark ? "dark" : "light"}
               onChange={handleDateChange}
