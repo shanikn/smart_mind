@@ -31,6 +31,7 @@ class Note:
     created_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+    edited_at: Optional[datetime] = None  # last change by the user (PUT /notes/{id}); None = never
     category: str = "todo"
     contexts: list = field(default_factory=list)
     list_name: str = "General"
@@ -58,6 +59,7 @@ def note_to_dict(note: Note) -> dict:
         "_id": note.id,
         "content": note.content,
         "created_at": note.created_at,
+        "edited_at": note.edited_at,
         "category": note.category,
         "contexts": note.contexts,
         "list_name": note.list_name,
@@ -85,6 +87,7 @@ def dict_to_note(d: dict) -> Note:
         id=d["_id"],
         content=d["content"],
         created_at=d["created_at"],
+        edited_at=d.get("edited_at"),
         category=d["category"],
         contexts=d.get("contexts", []),
         list_name=d.get("list_name", "General"),

@@ -363,3 +363,16 @@ describe("Delete", () => {
     expect(hasDelete(tree)).toBe(false);
   });
 });
+
+test("editing: shows when the note was created and last edited", async () => {
+  const note = { ...EXISTING, created_at: "2025-03-04T08:00:00Z", edited_at: "2025-03-05T08:00:00Z" };
+  const tree = await renderScreen({ note });
+  const text = allText(tree.root);
+  expect(text).toContain("Created ");
+  expect(text).toContain("Edited ");
+});
+
+test("a new note shows no created line", async () => {
+  const tree = await renderScreen();
+  expect(allText(tree.root)).not.toContain("Created ");
+});

@@ -25,6 +25,7 @@ import { loadPlaces } from "../services/placesStore";
 import { ServerPlace } from "../lib/userPlaces";
 import { CATEGORIES, categoryLabel, normalizeCategory } from "../lib/categoryColors";
 import { pastReminder, startOfToday } from "../lib/reminderDate";
+import { noteDatesLine } from "../lib/noteDates";
 import { Card, Chip, ChipRow, PrimaryButton, TextButton, ToggleRow } from "../components/ui";
 import { MIN_TOUCH_TARGET, Theme, fonts, spacing } from "../theme";
 import { useTheme, useThemedStyles } from "../ThemeContext";
@@ -114,6 +115,7 @@ export default function AddEditNoteScreen() {
   const initialListName = route.params?.initialListName;
 
   const isEditing = !!existingNote?._id;
+  const datesLine = isEditing ? noteDatesLine(existingNote!) : null;
   const [content, setContent] = useState(existingNote?.content || "");
   const [listName, setListName] = useState(existingNote?.list_name || initialListName || GENERAL);
   const [categoryExplicit, setCategoryExplicit] = useState(existingNote?.category_explicit ?? false);
@@ -397,6 +399,8 @@ export default function AddEditNoteScreen() {
           </ChipRow>
         </Card>
 
+        {datesLine && <Text style={[type.caption, styles.dates]}>{datesLine}</Text>}
+
         {isEditing && (
           <TextButton label="Delete note" destructive onPress={handleDelete} style={styles.deleteButton} />
         )}
@@ -453,5 +457,6 @@ const makeStyles = ({ colors, type }: Theme) =>
   resetRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   resetCaption: { flex: 1 },
   chips: { marginTop: 10 },
+  dates: { textAlign: "center" },
   deleteButton: { alignSelf: "center" },
 });

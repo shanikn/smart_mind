@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import re  # noqa: E402
-from datetime import date  # noqa: E402
+from datetime import date, datetime, timezone  # noqa: E402
 from typing import Annotated, List, Union  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr  # noqa: E402
 from fastapi import Body, FastAPI, Header, HTTPException, Query  # noqa: E402
@@ -347,6 +347,13 @@ def _note_fields(values: dict) -> dict:
     return fields
 
 
+def _is_edit(saved: dict, fields: dict) -> bool:
+    """True when the save changes the note. The edit screen sends every field
+    back on Save, and turning reminders off (the notification's Done) is not
+    an edit of the note."""
+    return any(saved.get(k) != v for k, v in fields.items() if k != "reminders_enabled")
+
+
 # update note fields: a JSON body (the app), or query parameters (older app
 # versions, which sent the note text in the URL)
 @app.put("/notes/{note_id}")
@@ -384,12 +391,14 @@ def change_note(
         }
         values = {k: v for k, v in query.items() if v is not None}
     fields = _note_fields(values)
+    saved = get_note_by_id(note_id, user_id=user_id)
     if fields.get("remind_on_date"):
         # the edit screen sends the saved date back on every save, so an old
         # note can keep a date that has passed; only a new date is checked
-        saved = get_note_by_id(note_id, user_id=user_id)
         if saved and saved.get("remind_on_date") != fields["remind_on_date"]:
             _check_remind_date(fields["remind_on_date"])
+    if saved and _is_edit(saved, fields):
+        fields["edited_at"] = datetime.now(timezone.utc)
     matched = update_note(note_id, fields, user_id=user_id)
     if matched == 0:
         raise HTTPException(status_code=404, detail="Note not found")
