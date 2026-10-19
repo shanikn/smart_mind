@@ -44,7 +44,8 @@ def test_no_coordinates(text):
     ("https://www.google.com/maps/place/%D7%A2%D7%96%D7%A8%D7%99%D7%90%D7%9C%D7%99/data=!4m2", "עזריאלי"),
     ("https://maps.google.com/?q=Rothschild+10,+Tel+Aviv&ftid=0x151d4b:0x2ab4&entry=gps", "Rothschild 10, Tel Aviv"),
     ("https://www.google.com/maps/search/?api=1&query=Dizengoff%20Center", "Dizengoff Center"),
-    ("https://consent.google.com/ml?continue=https://www.google.com/maps/place/Azrieli%2BCenter/data%3D!4m2", "Azrieli Center"),
+    ("https://consent.google.com/ml?continue="
+     "https://www.google.com/maps/place/Azrieli%2BCenter/data%3D!4m2", "Azrieli Center"),
 ])
 def test_place_text_from_link(url, expected):
     assert maps_links.place_text_from_link(url) == expected
