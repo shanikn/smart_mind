@@ -3,6 +3,7 @@ import * as Notifications from "expo-notifications";
 import { sendFeedback } from "../api/reminders";
 import { getNotes, updateNote } from "../api/notes";
 import { removeAlertNote } from "./alertNotesCache";
+import { ensureSignedIn } from "./apiAuth";
 import { syncScheduledReminders } from "./scheduledReminders";
 import {
   handleNotificationAction,
@@ -116,6 +117,31 @@ test("no signal: the notification still goes away and nothing throws", async () 
   (sendFeedback as jest.Mock).mockRejectedValueOnce(new TypeError("Network request failed"));
   await expect(handleNotificationAction(response(ACTION_NOT_USEFUL))).resolves.toBeUndefined();
   expect(mocked.dismissNotificationAsync).toHaveBeenCalled();
+});
+
+test("a press that failed can be retried by its second delivery", async () => {
+  const press = response(ACTION_NOT_USEFUL);
+  (sendFeedback as jest.Mock).mockRejectedValueOnce(new TypeError("Network request failed"));
+  await handleNotificationAction(press);
+  await handleNotificationAction(press);
+  expect(sendFeedback).toHaveBeenCalledTimes(2);
+});
+
+test("signed out: Done and Not useful leave the notification up and do nothing", async () => {
+  (ensureSignedIn as jest.Mock).mockResolvedValue(false);
+  try {
+    await handleNotificationAction(response(ACTION_DONE));
+    await handleNotificationAction(response(ACTION_NOT_USEFUL));
+    expect(mocked.dismissNotificationAsync).not.toHaveBeenCalled();
+    expect(sendFeedback).not.toHaveBeenCalled();
+    expect(updateNote).not.toHaveBeenCalled();
+    // Later needs no sign-in
+    await handleNotificationAction(response(ACTION_LATER));
+    expect(mocked.scheduleNotificationAsync).toHaveBeenCalled();
+    expect(mocked.dismissNotificationAsync).toHaveBeenCalledTimes(1);
+  } finally {
+    (ensureSignedIn as jest.Mock).mockResolvedValue(true);
+  }
 });
 
 describe("noteToOpen", () => {

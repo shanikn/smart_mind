@@ -1,12 +1,11 @@
 """A reminder date picked by hand can't be a day that has already passed
 (the user's local day, agents/clock.py)."""
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
 import api.main as main
-from agents.clock import local_now
 from notepad import notes_collection
 from tests.support import note_doc, update_any
 
@@ -15,12 +14,17 @@ USER = "past-dates-user"
 AUTH = {"Authorization": "Bearer token-past"}
 
 
+# one fixed "now" for the API and the test dates, so midnight can't fall between them
+NOW = datetime(2026, 10, 19, 12, 0)
+
+
 def day(offset: int) -> str:
-    return (local_now().date() + timedelta(days=offset)).isoformat()
+    return (NOW.date() + timedelta(days=offset)).isoformat()
 
 
 @pytest.fixture(autouse=True)
 def signed_in(monkeypatch):
+    monkeypatch.setattr(main, "local_now", lambda: NOW)
     monkeypatch.setattr(
         main, "get_user_id", lambda authorization: USER if authorization == AUTH["Authorization"] else None
     )

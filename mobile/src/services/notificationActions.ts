@@ -53,9 +53,14 @@ export async function handleNotificationAction(response: Notifications.Notificat
   handled.add(key);
 
   const { request } = response.notification;
-  // Android leaves the notification up after a button press
-  await Notifications.dismissNotificationAsync(request.identifier).catch(() => {});
   try {
+    // Done and Not useful need the server: signed out, the notification stays
+    if (plan.kind !== "later" && !(await ensureSignedIn())) {
+      handled.delete(key);
+      return;
+    }
+    // Android leaves the notification up after a button press
+    await Notifications.dismissNotificationAsync(request.identifier).catch(() => {});
     if (plan.kind === "later") {
       await Notifications.scheduleNotificationAsync({
         identifier: SNOOZE_ID_PREFIX + plan.noteId,
@@ -70,9 +75,6 @@ export async function handleNotificationAction(response: Notifications.Notificat
       });
       return;
     }
-    if (!(await ensureSignedIn())) {
-      return;
-    }
     if (plan.kind === "not-useful") {
       await sendFeedback(plan.noteId, "dismiss");
       return;
@@ -84,6 +86,7 @@ export async function handleNotificationAction(response: Notifications.Notificat
     await removeAlertNote(plan.noteId).catch(() => {});
     await syncScheduledReminders();
   } catch (e) {
+    handled.delete(key); // a second delivery of the same press can retry
     console.log("Notification action failed", e);
   }
 }

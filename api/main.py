@@ -498,6 +498,7 @@ def resolve_maps_link(url: str, authorization: Optional[str] = Header(None)):
         lat, lon = maps_links.resolve(url)
     except maps_links.LinkError as e:
         if e.kind == "no_coordinates" and e.place_text:
+            enforce_limit(SEARCH_LIMIT, user_id, "searches")  # it's an address search
             return _place_from_text(e.place_text)
         logging.warning("Maps link failed: %s", e.kind)
         raise HTTPException(status_code=_LINK_STATUS.get(e.kind, 502), detail={"kind": e.kind})
