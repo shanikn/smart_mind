@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { ActivityIndicator, AppState, View } from "react-native";
-import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
+import {
+  createNavigationContainerRef,
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+} from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -26,7 +32,8 @@ import { syncStoreAlerts } from "./src/services/storeAlerts";
 import { Note } from "./src/types/notes";
 import { fonts } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/ThemeContext";
-import { linkingFor } from "./src/navigation/linking";
+import { linkingFor, MainTabsParamList } from "./src/navigation/linking";
+import { isTap, noteToOpen } from "./src/services/notificationActions";
 
 export type NotesStackParamList = {
   NotesList: undefined;
@@ -36,6 +43,11 @@ export type NotesStackParamList = {
 const Stack = createNativeStackNavigator<NotesStackParamList>();
 const Tab = createBottomTabNavigator();
 const REMINDER_POLL_MS = 60 * 1000;
+const navigationRef = createNavigationContainerRef<MainTabsParamList>();
+
+function openNote(note: Note) {
+  navigationRef.navigate("Notes", { screen: "AddEditNote", params: { note } });
+}
 
 function NotesStack() {
   return (
@@ -164,6 +176,32 @@ function RootNavigator() {
     };
   }, [user]);
 
+  // a tap on a note's notification opens that note (also when the tap started the app)
+  const lastResponse = Notifications.useLastNotificationResponse();
+  const openedResponseRef = useRef<string | null>(null);
+  const pendingNoteRef = useRef<Note | null>(null);
+  useEffect(() => {
+    if (!user || !lastResponse || !isTap(lastResponse)) {
+      return;
+    }
+    const id = lastResponse.notification.request.identifier;
+    if (openedResponseRef.current === id) {
+      return;
+    }
+    openedResponseRef.current = id;
+    noteToOpen(lastResponse).then((note) => {
+      if (!note) {
+        return;
+      }
+      if (navigationRef.isReady()) {
+        openNote(note);
+      } else {
+        // the app is still loading (fonts); onReady opens it
+        pendingNoteRef.current = note;
+      }
+    });
+  }, [user, lastResponse]);
+
   const { colors, dark } = useTheme();
   // screen backgrounds behind transitions, so nothing flashes white in dark mode
   const navigationTheme = useMemo(() => {
@@ -193,7 +231,17 @@ function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme} linking={linking}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navigationTheme}
+      linking={linking}
+      onReady={() => {
+        if (pendingNoteRef.current) {
+          openNote(pendingNoteRef.current);
+          pendingNoteRef.current = null;
+        }
+      }}
+    >
       <StatusBar style={dark ? "light" : "dark"} />
       {user ? <MainTabs /> : <LoginScreen />}
     </NavigationContainer>

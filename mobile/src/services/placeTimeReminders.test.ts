@@ -53,6 +53,12 @@ test("away at the time, arriving later that day: it alerts on arrival, once", as
   expect(notify).toHaveBeenCalledTimes(1);
 });
 
+test("the arrival alert carries the Done / Later / Not useful buttons", async () => {
+  await onPlaceGeofenceEvent("exit", HOME, false, at(8));
+  await onPlaceGeofenceEvent("enter", HOME, true, at(19));
+  expect(notify.mock.calls[0][0].content.categoryIdentifier).toBe("note-reminder");
+});
+
 test("at the place at the time (left after it): coming back doesn't alert again", async () => {
   await onPlaceGeofenceEvent("exit", HOME, false, at(18, 30));
   await onPlaceGeofenceEvent("enter", HOME, true, at(19));

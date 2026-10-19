@@ -6,6 +6,7 @@ import { dayKey, missedPlaceTimeNotes } from "../lib/placeTimeReminders";
 import { getNotificationsEnabled } from "../lib/reminderPrefs";
 import { notesForAlerts } from "./placeState";
 import { syncScheduledReminders } from "./scheduledReminders";
+import { NOTE_REMINDER_CATEGORY } from "../lib/notificationActions";
 
 // The geofence side of notes with a time and a place (lib/placeTimeReminders.ts):
 // every enter/exit of a place re-plans the alarms (a note's alarm only while
@@ -48,6 +49,7 @@ async function alertMissedNotes(placeId: string, now: Date): Promise<void> {
         body: note.content,
         sound: "default",
         data: { noteId: note._id },
+        categoryIdentifier: NOTE_REMINDER_CATEGORY,
       },
       trigger: null,
     });

@@ -10,6 +10,8 @@ I18nManager.forceRTL(false);
 // registers the geofence background task before anything else, so it also
 // exists when Android starts the app in the background for a geofence event
 import './src/services/geofence';
+// the same for Done / Later / Not useful on a notification
+import './src/services/notificationActions';
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

@@ -17,3 +17,15 @@ export function connectApiToFirebase() {
     signOutCleanup();
   });
 }
+
+// When Android wakes the app in the background (a geofence event, a
+// notification button), no screen has mounted, so AuthContext hasn't
+// connected the API client to Firebase yet.
+export async function ensureSignedIn(): Promise<boolean> {
+  await auth.authStateReady();
+  if (!auth.currentUser) {
+    return false;
+  }
+  connectApiToFirebase();
+  return true;
+}

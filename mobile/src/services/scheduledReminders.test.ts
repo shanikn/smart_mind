@@ -67,6 +67,13 @@ test("cancels only earlier reminder alarms, then schedules the plan", async () =
   });
 });
 
+test("each alarm carries the Done / Later / Not useful buttons", async () => {
+  await applyReminderSchedule(plan);
+  for (const [request] of mocked.scheduleNotificationAsync.mock.calls) {
+    expect(request.content.categoryIdentifier).toBe("note-reminder");
+  }
+});
+
 test("remembers which notes have an alarm, so polling can skip them", async () => {
   await applyReminderSchedule(plan);
   expect(await getScheduledNoteIds()).toEqual(new Set(["a", "b"]));

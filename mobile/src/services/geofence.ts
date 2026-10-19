@@ -2,8 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 
-import { auth } from "../config/firebase";
-import { connectApiToFirebase } from "./apiAuth";
+import { ensureSignedIn as ensureAuthToken } from "./apiAuth";
 import { combineRegions, isStoreRegionId } from "../lib/storeAlerts";
 import {
   GeofenceRegion,
@@ -46,18 +45,6 @@ async function getRegisteredRegions(): Promise<GeofenceRegion[] | null> {
   } catch {
     return null;
   }
-}
-
-// When Android wakes the app in the background for a geofence event, no
-// screen has mounted, so AuthContext hasn't connected the API client to Firebase yet.
-async function ensureAuthToken(): Promise<boolean> {
-  await auth.authStateReady();
-  const user = auth.currentUser;
-  if (!user) {
-    return false;
-  }
-  connectApiToFirebase();
-  return true;
 }
 
 // Defined at module top level (imported from index.ts) so the task exists

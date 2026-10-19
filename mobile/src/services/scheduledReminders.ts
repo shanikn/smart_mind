@@ -9,6 +9,7 @@ import {
   REMINDER_ID_PREFIX,
 } from "../lib/reminderSchedule";
 import { notesForAlerts, whereAmI } from "./placeState";
+import { NOTE_REMINDER_CATEGORY } from "../lib/notificationActions";
 
 // Exact local alarms for reminder times, scheduled ahead with
 // expo-notifications. A note with a time and a place gets its alarm only while
@@ -62,6 +63,7 @@ export async function applyReminderSchedule(plan: PlannedReminder[]): Promise<vo
         body: reminder.body,
         sound: "default",
         data: { noteId: reminder.noteId },
+        categoryIdentifier: NOTE_REMINDER_CATEGORY,
       },
       trigger: toTrigger(reminder),
     });
