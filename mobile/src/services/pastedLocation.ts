@@ -4,7 +4,8 @@ import { LatLon } from "../lib/geo";
 import { NO_COORDINATES_MESSAGE, parsePastedLocation } from "../lib/pastedLocation";
 
 // A pasted location as a point: coordinates and full Google Maps links are
-// read on the phone; short share links are followed by the server.
+// read on the phone; the server follows short share links and looks up links
+// with only a place's name or address.
 
 export class PastedLocationError extends Error {}
 

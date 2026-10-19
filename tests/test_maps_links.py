@@ -37,6 +37,27 @@ def test_no_coordinates(text):
     assert maps_links.coordinates_from_text(text) is None
 
 
+# ---- links with only a place's name or address ----
+
+@pytest.mark.parametrize("url, expected", [
+    ("https://www.google.com/maps/place/Azrieli+Center/data=!4m2!3m1!1s0x151d4b9e:0x2ab4", "Azrieli Center"),
+    ("https://www.google.com/maps/place/%D7%A2%D7%96%D7%A8%D7%99%D7%90%D7%9C%D7%99/data=!4m2", "עזריאלי"),
+    ("https://maps.google.com/?q=Rothschild+10,+Tel+Aviv&ftid=0x151d4b:0x2ab4&entry=gps", "Rothschild 10, Tel Aviv"),
+    ("https://www.google.com/maps/search/?api=1&query=Dizengoff%20Center", "Dizengoff Center"),
+    ("https://consent.google.com/ml?continue=https://www.google.com/maps/place/Azrieli%2BCenter/data%3D!4m2", "Azrieli Center"),
+])
+def test_place_text_from_link(url, expected):
+    assert maps_links.place_text_from_link(url) == expected
+
+
+@pytest.mark.parametrize("url", [
+    "https://maps.app.goo.gl/AbC123", "https://www.google.com/maps/@32.0812,34.8105,15z",
+    "https://maps.google.com/?q=32.0812,34.8105",
+])
+def test_no_place_text(url):
+    assert maps_links.place_text_from_link(url) is None
+
+
 # ---- following short links, safely ----
 
 @pytest.fixture
@@ -116,6 +137,18 @@ def test_link_without_coordinates(hops):
     assert e.value.kind == "no_coordinates"
 
 
+def test_short_link_to_a_named_place_carries_its_text(hops):
+    table, _ = hops
+    table["https://maps.app.goo.gl/AbC123"] = (
+        "https://www.google.com/maps/place/Azrieli+Center/data=!4m2!3m1!1s0x151d4b9e:0x2ab4?entry=gps"
+    )
+    table["https://www.google.com/maps/place/Azrieli+Center/data=!4m2!3m1!1s0x151d4b9e:0x2ab4?entry=gps"] = None
+    with pytest.raises(maps_links.LinkError) as e:
+        maps_links.resolve("https://maps.app.goo.gl/AbC123")
+    assert e.value.kind == "no_coordinates"
+    assert e.value.place_text == "Azrieli Center"
+
+
 def test_full_link_needs_no_request(hops):
     _, seen = hops
     assert maps_links.resolve("https://www.google.com/maps/@32.0812,34.8105,15z") == (32.0812, 34.8105)
@@ -175,6 +208,65 @@ def test_endpoint_no_coordinates_is_422(hops):
     res = client.get("/places/resolve-link", params={"url": "https://maps.app.goo.gl/AbC123"})
     assert res.status_code == 422
     assert res.json()["detail"]["kind"] == "no_coordinates"
+
+
+ADDRESS_LINK = "https://maps.google.com/?q=Rothschild+10,+Tel+Aviv&ftid=0x151d4b:0x2ab4&entry=gps"
+
+
+@pytest.fixture
+def searches(monkeypatch):
+    """Fake address search: query -> results."""
+    import geocode
+    table = {}
+    asked = []
+
+    def fake(query, lat=None, lon=None):
+        asked.append(query)
+        return table.get(query, [])
+
+    monkeypatch.setattr(geocode, "search", fake)
+    return table, asked
+
+
+def test_endpoint_finds_an_address_link_by_search(hops, searches):
+    table, _ = hops
+    table["https://maps.app.goo.gl/Addr1"] = ADDRESS_LINK
+    table[ADDRESS_LINK] = None
+    results, asked = searches
+    results["Rothschild 10, Tel Aviv"] = [{"label": "Rothschild 10", "latitude": 32.0637, "longitude": 34.7741}]
+    res = client.get("/places/resolve-link", params={"url": "https://maps.app.goo.gl/Addr1"})
+    assert res.status_code == 200
+    assert res.json() == {"latitude": 32.0637, "longitude": 34.7741}
+    assert asked == ["Rothschild 10, Tel Aviv"]
+
+
+def test_endpoint_full_place_link_without_coordinates(hops, searches):
+    results, _ = searches
+    results["Azrieli Center"] = [{"label": "Azrieli", "latitude": 32.0745, "longitude": 34.7918}]
+    url = "https://www.google.com/maps/place/Azrieli+Center"
+    hops[0][url] = None  # no redirect
+    res = client.get("/places/resolve-link", params={"url": url})
+    assert res.json() == {"latitude": 32.0745, "longitude": 34.7918}
+
+
+def test_endpoint_address_not_found_is_no_coordinates(hops, searches):
+    table, _ = hops
+    table[ADDRESS_LINK] = None
+    res = client.get("/places/resolve-link", params={"url": ADDRESS_LINK})
+    assert res.status_code == 422
+    assert res.json()["detail"]["kind"] == "no_coordinates"
+
+
+def test_endpoint_address_search_down_is_504(hops, monkeypatch):
+    import geocode
+
+    def down(query, lat=None, lon=None):
+        raise geocode.GeocodeError("network")
+
+    monkeypatch.setattr(geocode, "search", down)
+    hops[0][ADDRESS_LINK] = None
+    res = client.get("/places/resolve-link", params={"url": ADDRESS_LINK})
+    assert res.status_code == 504
 
 
 def test_endpoint_requires_sign_in(monkeypatch, hops):

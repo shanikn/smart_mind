@@ -42,19 +42,23 @@ describe("Google Maps links", () => {
 
   test("short share links go to the server to be followed", () => {
     expect(parsePastedLocation("https://maps.app.goo.gl/AbC123xyz")).toEqual({
-      kind: "short",
+      kind: "server",
       url: "https://maps.app.goo.gl/AbC123xyz",
     });
     expect(parsePastedLocation("Check this out https://maps.app.goo.gl/AbC123xyz")).toEqual({
-      kind: "short",
+      kind: "server",
       url: "https://maps.app.goo.gl/AbC123xyz",
     });
   });
 
-  test("a Google Maps link without coordinates", () => {
+  test("a link with only a place's name or address goes to the server to be looked up", () => {
     expect(parsePastedLocation("https://www.google.com/maps/place/Azrieli+Center")).toEqual({
-      kind: "invalid",
-      message: "This link has no coordinates. In Google Maps, drop a pin and share that instead.",
+      kind: "server",
+      url: "https://www.google.com/maps/place/Azrieli+Center",
+    });
+    expect(parsePastedLocation("https://maps.google.com/?q=Rothschild+10,+Tel+Aviv&ftid=0x151d4b:0x2ab4")).toEqual({
+      kind: "server",
+      url: "https://maps.google.com/?q=Rothschild+10,+Tel+Aviv&ftid=0x151d4b:0x2ab4",
     });
   });
 });

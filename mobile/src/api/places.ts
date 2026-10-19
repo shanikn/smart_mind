@@ -45,7 +45,8 @@ export async function nearbyStores(
   return apiRequest(`/places/nearby?${params.toString()}`);
 }
 
-// coordinates of a Google Maps link; the server follows short share links
+// coordinates of a Google Maps link; the server follows short share links and
+// looks up links with only a place's name or address
 export async function resolveMapsLink(url: string): Promise<{ latitude: number; longitude: number }> {
   return apiRequest(`/places/resolve-link?${new URLSearchParams({ url }).toString()}`);
 }

@@ -490,15 +490,30 @@ _LINK_STATUS = {"not_allowed": 422, "no_coordinates": 422, "network": 504}
 @app.get("/places/resolve-link")
 def resolve_maps_link(url: str, authorization: Optional[str] = Header(None)):
     """Coordinates of a Google Maps link (short maps.app.goo.gl links are
-    followed, Google hosts only). Nothing is stored."""
+    followed, Google hosts only). A link with only a place's name or address
+    is looked up by address search. Nothing is stored."""
     user_id = require_user_id(authorization)
     enforce_limit(LINK_LIMIT, user_id, "links")
     try:
         lat, lon = maps_links.resolve(url)
     except maps_links.LinkError as e:
+        if e.kind == "no_coordinates" and e.place_text:
+            return _place_from_text(e.place_text)
         logging.warning("Maps link failed: %s", e.kind)
         raise HTTPException(status_code=_LINK_STATUS.get(e.kind, 502), detail={"kind": e.kind})
     return {"latitude": lat, "longitude": lon}
+
+
+def _place_from_text(text: str) -> dict:
+    """The first address search match for a link's place name or address."""
+    try:
+        results = geocode.search(text)
+    except geocode.GeocodeError as e:
+        logging.warning("Maps link place search failed: %s", e)
+        raise HTTPException(status_code=_GEOCODE_STATUS.get(e.kind, 502), detail={"kind": e.kind})
+    if not results:
+        raise HTTPException(status_code=422, detail={"kind": "no_coordinates"})
+    return {"latitude": results[0]["latitude"], "longitude": results[0]["longitude"]}
 
 
 # ---- places: names (and optional keywords) only; coordinates stay on the phone ----

@@ -5,6 +5,11 @@ Full links carry the coordinates in the URL (!3d..!4d.. for a place's pin,
 (maps.app.goo.gl) only redirect to such a URL, so the server follows the
 redirects for the phone.
 
+Newer share links of a named place or address often carry no coordinates
+at all (/maps/place/<name>/data=!...!1s0x..:0x.. or ?q=<address>&ftid=..).
+Then the place's text is returned with the error, and the endpoint looks it
+up by address search instead.
+
 Following user-supplied URLs is a server-side request forgery risk, so:
 https only, only Google Maps hosts, every redirect hop checked before it's
 requested, HEAD requests (no page content is read), a few hops at most.
@@ -13,7 +18,7 @@ import re
 import socket
 from typing import Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urljoin, urlparse
+from urllib.parse import unquote, unquote_plus, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 USER_AGENT = "SmartMind/1.0 (university project; contextmind-api.azurewebsites.net)"
@@ -29,15 +34,20 @@ _PIN = re.compile(r"!3d" + _NUM + r"!4d" + _NUM)  # a place's pin
 _QUERY = re.compile(r"[?&](?:q|query|ll|sll|destination|center)=" + _NUM + r"\s*,\s*\+?" + _NUM + r"(?![\d.])")
 _AT = re.compile(r"@" + _NUM + r"," + _NUM + r"(?![\d.])")  # the map's center
 _PLAIN = re.compile(r"^\s*" + _NUM + r"\s*[,\s]\s*" + _NUM + r"\s*$")
+_PLACE_NAME = re.compile(r"/maps/place/([^/?#&]+)")
+_QUERY_TEXT = re.compile(r"[?&](?:q|query|destination)=([^&#]+)")
+MAX_PLACE_TEXT = 200
 
 
 class LinkError(Exception):
-    """kind: not_allowed | no_coordinates | network | http"""
+    """kind: not_allowed | no_coordinates | network | http. A no_coordinates
+    error may carry place_text: the place's name or address from the link."""
 
-    def __init__(self, kind: str, detail: str = ""):
+    def __init__(self, kind: str, detail: str = "", place_text: Optional[str] = None):
         super().__init__(f"{kind} {detail}".strip())
         self.kind = kind
         self.detail = detail
+        self.place_text = place_text
 
 
 def _valid(lat: float, lon: float) -> bool:
@@ -57,6 +67,19 @@ def coordinates_from_text(text: str) -> Optional[tuple]:
         m = matches[-1] if last else matches[0]
         lat, lon = float(m.group(1)), float(m.group(2))
         return (lat, lon) if _valid(lat, lon) else None
+    return None
+
+
+def place_text_from_link(url: str) -> Optional[str]:
+    """The place's name or address in a Google Maps link without coordinates
+    ("/maps/place/Azrieli+Center/..." or "?q=Rothschild+10,+Tel+Aviv"), else None."""
+    decoded = unquote(url or "")  # the consent page wraps the real link once
+    for pattern in (_PLACE_NAME, _QUERY_TEXT):
+        m = pattern.search(decoded)
+        if m:
+            text = " ".join(unquote_plus(m.group(1)).split())[:MAX_PLACE_TEXT]
+            if text and not _PLAIN.match(text):
+                return text
     return None
 
 
@@ -109,6 +132,7 @@ def resolve(url: str) -> tuple:
         return coords
     seen = set()
     current = url
+    place_text = place_text_from_link(url)
     for _ in range(MAX_HOPS):
         if current in seen:
             break
@@ -122,5 +146,6 @@ def resolve(url: str) -> tuple:
             return coords
         if not is_allowed(location):
             raise LinkError("not_allowed", "redirected outside Google Maps")
+        place_text = place_text_from_link(location) or place_text
         current = location
-    raise LinkError("no_coordinates", "the link has no coordinates")
+    raise LinkError("no_coordinates", "the link has no coordinates", place_text=place_text)
