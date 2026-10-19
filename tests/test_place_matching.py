@@ -84,6 +84,38 @@ def test_built_in_places_still_work():
     assert _tag("do the laundry") == "p-home"  # Home's keywords
 
 
+# ---- the person who works there ("therapist" for "Therapy") ----
+
+THERAPY = Place(id="p-therapy", user_id=None, name="Therapy")
+
+
+def test_the_users_example_therapist_means_the_therapy_place():
+    assert _tag("show therapist my new app", PLACES + [THERAPY]) == "p-therapy"
+
+
+@pytest.mark.parametrize("name, text", [
+    ("Therapy", "ask the therapists about it"),
+    ("Pharmacy", "ask the pharmacist about the pills"),
+    ("Library", "return books to the librarian"),
+    ("Bakery", "tell the baker we need a cake"),
+    ("My Therapist", "therapy at 5"),
+    ("Pharmacist", "pharmacy run"),
+])
+def test_a_place_word_and_its_person_match_both_ways(name, text):
+    place = Place(id="p-x", user_id=None, name=name)
+    assert _by_name(text, [place]) == "p-x"
+
+
+@pytest.mark.parametrize("name, text", [
+    ("Therapy", "therapeutic music"),
+    ("Pharmacy", "pharmacies nearby"),   # plurals aren't matched (see "evyatars")
+    ("Gym", "gymnast practice"),
+])
+def test_other_word_forms_still_dont_match(name, text):
+    place = Place(id="p-x", user_id=None, name=name)
+    assert _by_name(text, [place]) is None
+
+
 # ---- Hebrew ----
 
 def test_hebrew_users_example_with_prefixes():
