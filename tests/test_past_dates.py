@@ -21,7 +21,9 @@ def day(offset: int) -> str:
 
 @pytest.fixture(autouse=True)
 def signed_in(monkeypatch):
-    monkeypatch.setattr(main, "get_user_id", lambda authorization: USER if authorization == AUTH["Authorization"] else None)
+    monkeypatch.setattr(
+        main, "get_user_id", lambda authorization: USER if authorization == AUTH["Authorization"] else None
+    )
     yield
     notes_collection.delete_many({"user_id": USER})
 
