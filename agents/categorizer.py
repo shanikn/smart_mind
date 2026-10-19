@@ -413,9 +413,9 @@ def _semantic_match(content: str, places: list):
 # any capitals ("Evyatar's" is "evyatar" + "s"). Hebrew attaches up to three
 # prefix letters to a word (ו ה ב ל מ ש כ: "לשדרות", "ובשדרות"); they're
 # stripped only when the rest is a whole word of a place name. An English
-# place word also matches the person who works there and back ("Therapy" /
-# "therapist", "Pharmacy" / "pharmacist", "Library" / "librarian",
-# "Bakery" / "baker"); other word forms don't ("evyatars"). The place
+# place word also matches the person (or people) who work there and back
+# ("Therapy" / "therapist(s)", "Pharmacy" / "pharmacist", "Library" /
+# "librarian", "Bakery" / "baker"); other word forms don't ("evyatars"). The place
 # with the most matching words wins; then a full-name match; then the
 # user's own places over Home/Uni/Work; then the order of the places.
 
@@ -445,6 +445,10 @@ def _person_forms(word: str) -> set:
     for ending in ("ists", "ist", "ians", "ian"):  # therapist -> therapy
         if word.endswith(ending):
             forms.add(word[:-len(ending)] + "y")
+            break
+    for ending in ("ers", "er"):  # baker -> bakery
+        if word.endswith(ending):
+            forms.add(word[:-len(ending)] + "ery")
             break
     return forms
 

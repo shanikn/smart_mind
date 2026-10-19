@@ -98,6 +98,7 @@ def test_the_users_example_therapist_means_the_therapy_place():
     ("Pharmacy", "ask the pharmacist about the pills"),
     ("Library", "return books to the librarian"),
     ("Bakery", "tell the baker we need a cake"),
+    ("Baker", "bread from the bakery"),
     ("My Therapist", "therapy at 5"),
     ("Pharmacist", "pharmacy run"),
 ])
