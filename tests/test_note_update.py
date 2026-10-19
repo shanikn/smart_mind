@@ -155,3 +155,45 @@ def test_query_empty_strings_clear(note_id):
 def test_query_bad_hour_or_minute_is_422_not_500(note_id, params):
     res = client.put(f"/notes/{note_id}", params=params, headers=AS_A)
     assert res.status_code == 422
+
+
+# ---- edited_at: when the user last changed the note ----
+
+def test_a_new_note_has_no_edited_time(note_id):
+    assert note_doc(note_id)["edited_at"] is None
+
+
+def test_changing_the_text_sets_edited_time(note_id):
+    client.put(f"/notes/{note_id}", json={"content": "call mom tonight"}, headers=AS_A)
+    doc = note_doc(note_id)
+    assert doc["edited_at"] is not None
+    assert doc["edited_at"] >= doc["created_at"]
+
+
+def test_saving_without_changes_keeps_no_edited_time(note_id):
+    # the edit screen sends every field back on Save, changed or not
+    doc = note_doc(note_id)
+    client.put(
+        f"/notes/{note_id}",
+        json={
+            "content": doc["content"], "list_name": doc["list_name"], "category": doc["category"],
+            "category_explicit": False, "location_explicit": False, "location_value": "",
+            "remind_date_explicit": False, "remind_time_explicit": False, "remind_on_date": "",
+            "remind_at_hour": "", "remind_at_minute": "", "reminders_enabled": True,
+        },
+        headers=AS_A,
+    )
+    assert note_doc(note_id)["edited_at"] is None
+
+
+def test_turning_reminders_off_is_not_an_edit(note_id):
+    # the notification's Done button only turns reminders off
+    client.put(f"/notes/{note_id}", json={"reminders_enabled": False}, headers=AS_A)
+    assert note_doc(note_id)["edited_at"] is None
+
+
+def test_the_list_sends_edited_time(note_id):
+    client.put(f"/notes/{note_id}", json={"list_name": "Uni"}, headers=AS_A)
+    notes = client.get("/notes/", headers=AS_A).json()
+    note = next(n for n in notes if n["_id"] == note_id)
+    assert note["edited_at"] is not None

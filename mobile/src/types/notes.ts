@@ -5,6 +5,8 @@ export interface Note {
     _id: string;
     content: string;
     created_at: string;
+    // last change by the user; null or missing when never edited (or an older backend)
+    edited_at?: string | null;
     category: string;
     contexts: string[];
     list_name: string;
