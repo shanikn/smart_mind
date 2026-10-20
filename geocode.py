@@ -19,7 +19,7 @@ from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
 
 SEARCH_URL = "https://nominatim.openstreetmap.org/search"
-USER_AGENT = "FocusedContext/1.0 (university project; contextmind-api.azurewebsites.net)"
+USER_AGENT = "SmartMind/1.0 (university project; contextmind-api.azurewebsites.net)"
 MAX_RESULTS = 5
 # labels in Hebrew where OSM has them, else English
 ACCEPT_LANGUAGE = "he,en"

@@ -42,7 +42,7 @@ def test_idea():
 
 
 def test_wishes_and_suggestions_are_ideas():
-    assert categorize("A dark mode would be nice in Smart Notes app") == "idea"
+    assert categorize("A dark mode would be nice in Smart Mind app") == "idea"
     assert categorize("it'd be cool to sync with the calendar") == "idea"
     assert categorize("It’d be cool to have widgets") == "idea"  # curly apostrophe
     assert categorize("Could add voice notes") == "idea"

@@ -63,7 +63,7 @@ def test_request_matches_nominatim_policy(upstream):
     assert parse_qs(url.query) == {
         "q": ["Reichman University"], "format": ["jsonv2"], "limit": ["5"], "accept-language": ["he,en"],
     }
-    assert "FocusedContext" in req.get_header("User-agent")
+    assert "SmartMind" in req.get_header("User-agent")
 
 
 def test_query_is_cleaned_of_rtl_marks(upstream):
