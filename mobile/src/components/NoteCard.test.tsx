@@ -70,7 +70,7 @@ test("long-press deletes the same way, with no confirmation", async () => {
   expect(alertSpy).not.toHaveBeenCalled();
 });
 
-describe("the done checkbox on to-do notes", () => {
+describe("the done checkbox on to-do and shopping notes", () => {
   const checkbox = (tree: ReactTestRenderer) =>
     tree.root.findAllByType(TouchableOpacity).find((t) => t.props.accessibilityLabel === "Mark done");
 
@@ -95,7 +95,14 @@ describe("the done checkbox on to-do notes", () => {
     }
   });
 
-  test.each(["errand", "idea", "event"])("a %s note has no checkbox", async (category) => {
+  test("a shopping note has the checkbox too", async () => {
+    const onDone = jest.fn();
+    const tree = await renderCard(jest.fn(), { ...NOTE, category: "errand" } as Note, onDone);
+    await act(async () => checkbox(tree)!.props.onPress());
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(["idea", "event"])("a %s note has no checkbox", async (category) => {
     const tree = await renderCard(jest.fn(), { ...NOTE, category } as Note, jest.fn());
     expect(checkbox(tree)).toBeUndefined();
   });

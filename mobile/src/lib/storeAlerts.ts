@@ -259,5 +259,5 @@ export function storeAlertMessage(storeName: string, errands: Note[]): { title: 
   const listed = errands.slice(0, MAX_LISTED).map((e) => short(e.content));
   const more = errands.length - listed.length;
   const list = listed.join(", ") + (more > 0 ? ` and ${more} more` : "");
-  return { title: "Errands nearby", body: `You're at ${storeName} – you have errands: ${list}` };
+  return { title: "Shopping nearby", body: `You're at ${storeName} – on your list: ${list}` };
 }

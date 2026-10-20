@@ -238,7 +238,7 @@ test("turning the phone alert off is saved", async () => {
 
 test("category: a chip sets it explicitly, Smart goes back to smart", async () => {
   const tree = await renderScreen({ note: EXISTING });
-  await press(tree, "Errand");
+  await press(tree, "Shopping");
   await press(tree, "Save");
   expect(updateNote).toHaveBeenLastCalledWith(
     "note-1",
@@ -311,7 +311,7 @@ test("category chips: the four kinds; an old kind shows as To-do", async () => {
   const tree = await renderScreen({ note: { ...EXISTING, category: "scheduled", category_explicit: true } });
   const chip = (label: string) =>
     tree.root.findAll((n) => typeof n.type !== "string" && n.props.accessibilityLabel === label && n.props.onPress)[0];
-  for (const label of ["To-do", "Errand", "Idea", "Event"]) {
+  for (const label of ["To-do", "Shopping", "Idea", "Event"]) {
     expect(chip(label)).toBeTruthy();
   }
   expect(chip("Reminder")).toBeUndefined();

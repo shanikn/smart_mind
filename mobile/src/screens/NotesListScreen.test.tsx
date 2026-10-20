@@ -183,14 +183,14 @@ const pressTab = async (tree: ReactTestRenderer, name: string) => act(async () =
 
 test("the folder tab, the checked categories and the search combine", async () => {
   const tree = await renderScreen();
-  await checkCategories(tree, "Errand");
+  await checkCategories(tree, "Shopping");
   expect(shownNotes(tree).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
   await pressTab(tree, "Uni");
   expect(shownNotes(tree)).toEqual(["לקנות חלב"]);
   await type(tree, "milk");
   expect(shownNotes(tree)).toEqual([]);
   await type(tree, "");
-  // Uni AND (Errand or To-do); the old "task" kind counts as To-do
+  // Uni AND (Shopping or To-do); the old "task" kind counts as To-do
   await checkCategories(tree, "To-do");
   expect(shownNotes(tree).sort()).toEqual(["Study for the exam", "לקנות חלב"].sort());
 });
@@ -245,7 +245,7 @@ describe("Recent / Upcoming toggle", () => {
     for (const view of ["Recent", "Upcoming"]) {
       const tree = await renderScreen();
       await act(async () => byLabel(tree, view).props.onPress());
-      await checkCategories(tree, "Errand");
+      await checkCategories(tree, "Shopping");
       expect(shownNotes(tree)).toEqual(["Buy milk", "לקנות חלב"]);
       await pressTab(tree, "Uni");
       expect(shownNotes(tree)).toEqual(["לקנות חלב"]);
@@ -516,7 +516,7 @@ describe("the category filter", () => {
   test("the sheet lists the four categories with their colors, each with a checkbox", async () => {
     const tree = await renderScreen();
     await openSheet(tree);
-    expect(options(tree).map((o) => o.props.accessibilityLabel)).toEqual(["To-do", "Errand", "Idea", "Event"]);
+    expect(options(tree).map((o) => o.props.accessibilityLabel)).toEqual(["To-do", "Shopping", "Idea", "Event"]);
     expect(options(tree).every((o) => o.props.accessibilityRole === "checkbox")).toBe(true);
     expect(options(tree).every((o) => o.props.accessibilityState.checked === false)).toBe(true);
     const dots = options(tree).map((o) => {
@@ -534,8 +534,8 @@ describe("the category filter", () => {
   test("check one or several: notes of any of them; the button shows how many", async () => {
     const tree = await renderScreen();
     await openSheet(tree);
-    await act(async () => categoryOption(tree, "Errand").props.onPress());
-    expect(categoryOption(tree, "Errand").props.accessibilityState.checked).toBe(true);
+    await act(async () => categoryOption(tree, "Shopping").props.onPress());
+    expect(categoryOption(tree, "Shopping").props.accessibilityState.checked).toBe(true);
     await act(async () => byLabel(tree, "Done").props.onPress());
     expect(shownNotes(tree).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
     expect(badge(tree).props.children).toBe(1);
@@ -552,7 +552,7 @@ describe("the category filter", () => {
     await checkCategories(tree, "Idea");
     expect(shownNotes(tree)).toHaveLength(3);
     await openSheet(tree);
-    await act(async () => categoryOption(tree, "Errand").props.onPress());
+    await act(async () => categoryOption(tree, "Shopping").props.onPress());
     await act(async () => categoryOption(tree, "Event").props.onPress());
     await act(async () => byLabel(tree, "Clear").props.onPress());
     expect(options(tree).every((o) => o.props.accessibilityState.checked === false)).toBe(true);
@@ -563,7 +563,7 @@ describe("the category filter", () => {
 
   test("the checked categories are remembered when you come back to the screen", async () => {
     const first = await renderScreen();
-    await checkCategories(first, "Errand");
+    await checkCategories(first, "Shopping");
     await act(async () => first.unmount());
     const again = await renderScreen();
     expect(shownNotes(again).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
@@ -575,7 +575,7 @@ describe("the category filter", () => {
     expect(tree.root.findAllByType(TouchableOpacity).some((t) => t.props.accessibilityLabel === "All categories")).toBe(
       false
     );
-    expect(tree.root.findAllByType(TouchableOpacity).some((t) => t.props.accessibilityLabel === "Errand notes")).toBe(
+    expect(tree.root.findAllByType(TouchableOpacity).some((t) => t.props.accessibilityLabel === "Shopping notes")).toBe(
       false
     );
   });
@@ -651,7 +651,7 @@ describe("the place filter", () => {
   test("combines with the categories and the folder; the badge counts both", async () => {
     const tree = await renderScreen();
     await pickPlace(tree, "No place");
-    await checkCategories(tree, "Errand");
+    await checkCategories(tree, "Shopping");
     expect(shownNotes(tree).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
     expect(badge(tree).props.children).toBe(2);
     await pressTab(tree, "Uni");
@@ -660,7 +660,7 @@ describe("the place filter", () => {
 
   test("Clear resets the categories and the place", async () => {
     const tree = await renderScreen();
-    await checkCategories(tree, "Errand");
+    await checkCategories(tree, "Shopping");
     await pickPlace(tree, "Uni");
     await act(async () => byLabel(tree, "Filter").props.onPress());
     await act(async () => byLabel(tree, "Clear").props.onPress());

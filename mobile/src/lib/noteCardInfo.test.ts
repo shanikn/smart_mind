@@ -50,7 +50,7 @@ describe("icon tile", () => {
 
 describe("meta line", () => {
   test("category name capitalized", () => {
-    expect(noteCardInfo(note({ category: "errand" }), PLACES, DEFAULT_CATEGORY_COLORS).categoryLabel).toBe("Errand");
+    expect(noteCardInfo(note({ category: "errand" }), PLACES, DEFAULT_CATEGORY_COLORS).categoryLabel).toBe("Shopping");
   });
 
   test("category text uses its color when readable on white (contrast >= 4.5)", () => {
@@ -74,7 +74,7 @@ describe("meta line", () => {
     });
   });
 
-  test("Errand's green (contrast 4.1 on white) shows as a slightly darker green, not grey", () => {
+  test("Shopping's green (contrast 4.1 on white) shows as a slightly darker green, not grey", () => {
     const shown = noteCardInfo(note({ category: "errand" }), PLACES, DEFAULT_CATEGORY_COLORS).categoryTextColor;
     expect(shown).not.toBe(DEFAULT_CATEGORY_COLORS.errand);
     expect(shown).not.toBe(colors.textMuted);
@@ -227,7 +227,7 @@ describe("currentPlaceLabel (the chip at the top of the list)", () => {
 });
 
 describe("kinds on the card", () => {
-  test("labels: To-do, Errand, Idea, Event; old values show as To-do", () => {
+  test("labels: To-do, Shopping, Idea, Event; old values show as To-do", () => {
     expect(noteCardInfo(note({ category: "todo" }), PLACES, DEFAULT_CATEGORY_COLORS).categoryLabel).toBe("To-do");
     expect(noteCardInfo(note({ category: "event" }), PLACES, DEFAULT_CATEGORY_COLORS).categoryLabel).toBe("Event");
     expect(noteCardInfo(note({ category: "scheduled" }), PLACES, DEFAULT_CATEGORY_COLORS).categoryLabel).toBe("To-do");

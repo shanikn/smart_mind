@@ -351,7 +351,7 @@ test("Store alerts for errands: on by default; turning it off saves and re-syncs
   const { syncStoreAlerts } = jest.requireMock("../services/storeAlerts");
   const tree = await renderScreen();
   const toggle = () =>
-    tree.root.findAllByType(Switch).find((s) => s.props.accessibilityLabel === "Errand alerts near stores")!;
+    tree.root.findAllByType(Switch).find((s) => s.props.accessibilityLabel === "Shopping alerts near stores")!;
   expect(toggle().props.value).toBe(true);
   await act(async () => toggle().props.onValueChange(false));
   expect(setStoreAlertsEnabled).toHaveBeenCalledWith(false);

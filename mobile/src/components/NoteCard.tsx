@@ -14,7 +14,7 @@ interface NoteCardProps {
   note: Note;
   onPress: () => void;
   onDelete: () => void;
-  // ticking a to-do's checkbox: the list deletes it with a "Marked done" Undo bar
+  // ticking a to-do's or shopping note's checkbox: the list deletes it with a "Marked done" Undo bar
   onDone?: () => void;
   places: ServerPlace[];
   categoryColors: CategoryColors;
@@ -25,7 +25,7 @@ export default function NoteCard({ note, onPress, onDelete, onDone, places, cate
   const styles = useThemedStyles(makeStyles);
   // the palette decides whether the category name is readable on the card
   const info = noteCardInfo(note, places, categoryColors, colors);
-  const showCheckbox = onDone !== undefined && normalizeCategory(note.category) === "todo";
+  const showCheckbox = onDone !== undefined && ["todo", "errand"].includes(normalizeCategory(note.category));
 
   const renderRightActions = () => (
     <TouchableOpacity

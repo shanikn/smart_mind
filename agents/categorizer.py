@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 # A note's kind. Time and place are separate fields, so a date or a time
 # alone never decides the kind.
 #   todo   - something to do (the default)
-#   errand - needs you to go somewhere (buy/get/grab + an item, shopping)
+#   errand - shopping: something to buy, pick up or send at a store (the app
+#            calls it "Shopping"); going somewhere or chores are to-dos
 #   idea   - something to keep; never alerts
 #   event  - an appointment, meeting, exam...
 KINDS = ("todo", "errand", "idea", "event")
@@ -27,10 +28,9 @@ event_words = [
     "wedding", "birthday", "concert", "flight", "reservation", "checkup", "check-up",
 ]
 errand = [
-    "go", "pick up", "buy", "errand",
-    "shopping", "shopping list", "walk", "take",
+    "buy", "shopping", "shopping list",
     "grocery", "groceries", "supermarket", "store",
-    "pharmacy", "prescription", "post office", "parcel",
+    "pharmacy", "prescription", "post office", "parcel", "package",
 ]
 # supermarket and drugstore chains, and toiletries: naming one is an errand
 # ("Rami Levi: milk, bread", "sunscreen")
@@ -52,9 +52,12 @@ hebrew_errand = [
     "בית מרקחת", "מרקחת", "דואר", "חבילה", "חבילות",
 ]
 # "get carrots" is an errand, but "get to the exam", "get up early" or
-# "get ready" are not: get/grab count only when an item follows
+# "get ready" are not: get/grab/pick up count only when an item follows,
+# and not a person ("pick up the kids")
+_PEOPLE = r"(the\s+|my\s+)?(kids?|children|son|daughter|baby|mom|dad|grandma|grandpa|friends?|him|her|them|me|us)\b"
 weak_errand = re.compile(
-    r"\b(get|grab)\s+(?!(to|up|ready|back|home|out|there|in|on|off|started|better)\b)\w"
+    r"\b(get|grab|pick\s+up)\s+(?!(to|up|ready|back|home|out|there|in|on|off|started|better)\b)"
+    r"(?!" + _PEOPLE + r")\w"
 )
 
 # Which kind of store an errand needs, for alerts near any such store.

@@ -143,7 +143,7 @@ describe("the four kinds", () => {
   });
 
   test("labels", () => {
-    expect(CATEGORIES.map(categoryLabel)).toEqual(["To-do", "Errand", "Idea", "Event"]);
+    expect(CATEGORIES.map(categoryLabel)).toEqual(["To-do", "Shopping", "Idea", "Event"]);
     expect(categoryLabel("scheduled")).toBe("To-do");
   });
 

@@ -101,3 +101,20 @@ def test_toiletries_go_to_the_drugstore():
 def test_food_with_cream_stays_at_the_supermarket():
     assert infer_store_type("buy ice cream") == "supermarket"
     assert infer_store_type("לקנות שמנת") == "supermarket"
+
+
+# The errand kind is shown as "Shopping": only things you get or send at a
+# store. Going somewhere or chores aren't shopping and mustn't alert near
+# supermarkets.
+def test_chores_and_going_places_are_todos_not_shopping():
+    for text in ("walk the dog", "take out the trash", "go to the bank", "pick up the kids",
+                 "get the kids from school", "water the plants", "take the car to the garage",
+                 "run errands"):
+        assert categorize(text) == "todo", text
+
+
+def test_buying_and_picking_up_things_is_still_shopping():
+    for text in ("buy milk", "get carrots", "pick up Maybelline mascara", "pick up the package",
+                 "go to the pharmacy", "go to the supermarket", "consider going to the store",
+                 "take the parcel to the post office", "pick up my prescription"):
+        assert categorize(text) == "errand", text

@@ -168,8 +168,8 @@ describe("arriving at a store (Alert when passing by)", () => {
     await handleStoreGeofenceEvent("enter", "store:supermarket:node/1");
     expect(notify).toHaveBeenCalledTimes(1);
     expect(notify.mock.calls[0][0].content).toMatchObject({
-      title: "Errands nearby",
-      body: "You're at Shufersal – you have errands: buy milk, get carrots",
+      title: "Shopping nearby",
+      body: "You're at Shufersal – on your list: buy milk, get carrots",
     });
     expect(notify.mock.calls[0][0].trigger).toBeNull();
   });
@@ -183,7 +183,7 @@ describe("arriving at a store (Alert when passing by)", () => {
   test("an errand done or deleted since: not listed; none left: no alert", async () => {
     mockedNotes.mockResolvedValue([CARROTS, PILLS]);
     await handleStoreGeofenceEvent("enter", "store:supermarket:node/1");
-    expect(notify.mock.calls[0][0].content.body).toBe("You're at Shufersal – you have errands: get carrots");
+    expect(notify.mock.calls[0][0].content.body).toBe("You're at Shufersal – on your list: get carrots");
     mockedNotes.mockResolvedValue([CARROTS]);
     await handleStoreGeofenceEvent("enter", "store:pharmacy:node/2");
     expect(notify).toHaveBeenCalledTimes(1);
@@ -198,7 +198,7 @@ describe("arriving at a store (Alert when passing by)", () => {
   test("offline at the store: uses the errands saved at the last sync", async () => {
     mockedNotes.mockRejectedValue(new Error("offline"));
     await handleStoreGeofenceEvent("enter", "store:pharmacy:node/2");
-    expect(notify.mock.calls[0][0].content.body).toBe("You're at Super-Pharm – you have errands: buy vitamins");
+    expect(notify.mock.calls[0][0].content.body).toBe("You're at Super-Pharm – on your list: buy vitamins");
   });
 
   test("turned off in Settings or phone notifications off: no alert", async () => {
@@ -241,7 +241,7 @@ describe("Alert when I stop there (the default)", () => {
     await handleStoreGeofenceEvent("enter", STORE, { wait });
     expect(notify).toHaveBeenCalledTimes(1);
     const request = notify.mock.calls[0][0];
-    expect(request.content.body).toBe("You're at Shufersal – you have errands: buy milk, get carrots");
+    expect(request.content.body).toBe("You're at Shufersal – on your list: buy milk, get carrots");
     expect(request.trigger.type).toBe("date");
     const delay = request.trigger.date.getTime() - Date.now();
     expect(delay).toBeGreaterThan(DWELL_MS - 5000);

@@ -26,7 +26,7 @@ const SCREENS: Record<Screen, { title: string; body: string; continueText: strin
     // when the app is closed or not in use
     body:
       "Smart Mind collects location data to alert you when you arrive at your saved places or are near " +
-      "stores for your errands, even when the app is closed or not in use. Your places' coordinates stay " +
+      "stores for your shopping notes, even when the app is closed or not in use. Your places' coordinates stay " +
       "on your phone. An approximate position is sent to the server only to find nearby stores and to " +
       'rank address search results, and is not stored. On the next screen, choose "Allow all the time".',
     continueText: "Continue",
