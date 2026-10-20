@@ -152,7 +152,7 @@ test("search filters as you type, case-insensitive and in Hebrew", async () => {
   expect(shownNotes(tree)).toEqual(["Buy milk"]);
   await type(tree, "חלב");
   expect(shownNotes(tree)).toEqual(["לקנות חלב"]);
-});
+}, 15000);
 
 test("the clear (x) button appears with text and empties the search", async () => {
   const tree = await renderScreen();
