@@ -32,6 +32,25 @@ errand = [
     "grocery", "groceries", "supermarket", "store",
     "pharmacy", "prescription", "post office", "parcel",
 ]
+# supermarket and drugstore chains, and toiletries: naming one is an errand
+# ("Rami Levi: milk, bread", "sunscreen")
+supermarket_chains = [
+    "rami levi", "rami levy", "shufersal", "yochananof", "osher ad", "tiv taam",
+    "רמי לוי", "שופרסל", "יוחננוף", "אושר עד", "טיב טעם", "ויקטורי", "יינות ביתן", "חצי חינם",
+]
+drugstore_words = [
+    "super-pharm", "super pharm", "superpharm", "good pharm", "drugstore",
+    "soap", "face soap", "face wash", "shampoo", "conditioner", "toothpaste", "toothbrush",
+    "deodorant", "sunscreen", "moisturizer", "face cream", "makeup", "razors", "cotton pads",
+    "סופר פארם", "סופרפארם", "גוד פארם", "סבון", "סבון פנים", "שמפו", "מרכך", "משחת שיניים",
+    "מברשת שיניים", "דאודורנט", "קרם הגנה", "קרם פנים", "קרם לחות", "איפור", "סכיני גילוח",
+]
+# Hebrew errands: to buy, shopping, the supermarket / corner store,
+# pharmacy, post office, package
+hebrew_errand = [
+    "לקנות", "קניות", "סופר", "סופרמרקט", "מכולת",
+    "בית מרקחת", "מרקחת", "דואר", "חבילה", "חבילות",
+]
 # "get carrots" is an errand, but "get to the exam", "get up early" or
 # "get ready" are not: get/grab count only when an item follows
 weak_errand = re.compile(
@@ -45,9 +64,11 @@ store_type_words = {
     "pharmacy": [
         "pharmacy", "medicine", "medicines", "meds", "pill", "pills", "vitamin", "vitamins",
         "prescription", "painkiller", "painkillers", "aspirin", "ibuprofen", "advil", "bandages",
-    ],
+        "בית מרקחת", "מרקחת", "תרופה", "תרופות", "ויטמינים", "מרשם",
+    ] + drugstore_words,
     "post_office": [
         "post office", "package", "packages", "parcel", "parcels", "mail", "stamps",
+        "דואר", "חבילה", "חבילות", "בולים",
     ],
 }
 
@@ -56,7 +77,7 @@ def infer_store_type(content: str) -> str:
     """The store type an errand needs: one of STORE_TYPES."""
     lower = content.lower()
     for kind, words in store_type_words.items():
-        if any(_has_word(lower, w) for w in words):
+        if any(_has_term(lower, w) for w in words):
             return kind
     return "supermarket"
 
@@ -81,6 +102,15 @@ def _has_word(content, keyword):
     return bool(re.search(r'\b' + re.escape(keyword) + r'\b', content))
 
 
+def _has_term(content, term):
+    """_has_word, but a Hebrew term may also carry up to three prefix letters
+    (ו ה ב ל מ ש כ: "ברמי לוי", "לסופר", "מהדואר")."""
+    if not re.search("[\u05d0-\u05ea]", term):
+        return _has_word(content, term)
+    prefix = r"(?<![\u05d0-\u05ea])[\u05d5\u05d4\u05d1\u05dc\u05de\u05e9\u05db]{0,3}"
+    return bool(re.search(prefix + re.escape(term) + r"(?![\u05d0-\u05ea])", content))
+
+
 def categorize(content: str) -> str:
     """One of KINDS. Order: an explicit idea, then an event, then an errand,
     then a hedged idea ("maybe", "consider"); everything else is a to-do."""
@@ -89,7 +119,11 @@ def categorize(content: str) -> str:
         result = "idea"
     elif any(_has_word(lower, w) for w in event_words):
         result = "event"
-    elif any(_has_word(lower, w) for w in errand) or weak_errand.search(lower):
+    elif (
+        any(_has_word(lower, w) for w in errand)
+        or any(_has_term(lower, w) for w in supermarket_chains + drugstore_words + hebrew_errand)
+        or weak_errand.search(lower)
+    ):
         result = "errand"
     elif any(_has_word(lower, w) for w in weak_idea_words):
         result = "idea"

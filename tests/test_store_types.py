@@ -59,3 +59,45 @@ def test_list_notes_reports_the_store_type():
     assert by_id[errand]["category"] == "errand"
     assert by_id[errand]["store_type"] == "pharmacy"
     assert by_id[todo]["store_type"] is None
+
+
+# Hebrew shopping notes and notes naming a supermarket chain are errands, so
+# they alert near any supermarket (Rami Levi included).
+def test_hebrew_shopping_is_an_errand():
+    for text in ("לקנות חלב", "קניות לשבת", "ללכת לסופר", "לקפוץ למכולת", "וגם לקנות לחם"):
+        assert categorize(text) == "errand", text
+        assert infer_store_type(text) == "supermarket", text
+
+
+def test_supermarket_chains_are_errands():
+    for text in ("Rami Levi: milk, bread", "rami levy tomorrow", "Shufersal - eggs",
+                 "חלב ברמי לוי", "שופרסל: ביצים", "ביוחננוף", "אושר עד"):
+        assert categorize(text) == "errand", text
+        assert infer_store_type(text) == "supermarket", text
+
+
+def test_hebrew_pharmacy_and_post_office():
+    assert infer_store_type("לקנות תרופות") == "pharmacy"
+    assert infer_store_type("לקנות ויטמינים בסופר פארם") == "pharmacy"
+    assert categorize("בית מרקחת") == "errand"
+    assert infer_store_type("לאסוף חבילה מהדואר") == "post_office"
+    assert categorize("לאסוף חבילה מהדואר") == "errand"
+
+
+def test_hebrew_words_inside_other_words_dont_count():
+    # "סופרת" (counts) isn't "סופר", "קניונים" (malls) isn't "קניות"
+    assert categorize("היא סופרת את הימים") == "todo"
+    assert categorize("רשימת קניונים") == "todo"
+
+
+# toiletries and cosmetics are drugstore (Super-Pharm) errands
+def test_toiletries_go_to_the_drugstore():
+    for text in ("buy face soap", "get shampoo and toothpaste", "sunscreen", "Super-Pharm: deodorant",
+                 "superpharm", "לקנות סבון פנים", "שמפו ומרכך", "משחת שיניים", "קרם הגנה", "סופרפארם"):
+        assert categorize(text) == "errand", text
+        assert infer_store_type(text) == "pharmacy", text
+
+
+def test_food_with_cream_stays_at_the_supermarket():
+    assert infer_store_type("buy ice cream") == "supermarket"
+    assert infer_store_type("לקנות שמנת") == "supermarket"
