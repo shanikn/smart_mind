@@ -1,6 +1,6 @@
 # Smart Mind – App Store listing
 
-Bundle id: `com.shanini.smartmind` · iPhone only · Support URL: https://shanikn.github.io/smart_notes/support.html · Privacy policy URL: https://shanikn.github.io/smart_notes/privacy-policy.html
+Bundle id: `com.shanini.smartmind` · iPhone only · Support URL: https://shanikn.github.io/smart_mind/support.html · Privacy policy URL: https://shanikn.github.io/smart_mind/privacy-policy.html
 
 ## Subtitle (max 30)
 

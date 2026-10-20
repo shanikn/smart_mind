@@ -180,8 +180,8 @@ az webapp log tail -n contextmind-api -g contextmind-rg
 
 `docs/` is published with GitHub Pages (branch `main`, folder `/docs`), so changes go live when they reach `main`:
 
-- Privacy policy: https://shanikn.github.io/smart_notes/privacy-policy.html
-- Delete your account: https://shanikn.github.io/smart_notes/delete-account.html
-- Support: https://shanikn.github.io/smart_notes/support.html
+- Privacy policy: https://shanikn.github.io/smart_mind/privacy-policy.html
+- Delete your account: https://shanikn.github.io/smart_mind/delete-account.html
+- Support: https://shanikn.github.io/smart_mind/support.html
 
 Keep them in step with the app when what it collects or sends changes.
