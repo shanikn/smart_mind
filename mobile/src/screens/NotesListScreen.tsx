@@ -76,6 +76,8 @@ export default function NotesListScreen() {
   // a deleted note is hidden while its Undo bar shows (services/pendingDelete.ts)
   const [hiddenIds, setHiddenIds] = useState<string[]>(hiddenNoteIds);
   const [undoNote, setUndoNote] = useState<Note | null>(pendingNote);
+  // the to-do last ticked done, so its Undo bar says "Marked done" instead of "Note deleted"
+  const [doneId, setDoneId] = useState<string | null>(null);
 
   useEffect(
     () =>
@@ -216,7 +218,16 @@ export default function NotesListScreen() {
     fetchNotes();
   };
 
-  const handleDelete = (note: Note) => deleteWithUndo(note);
+  const handleDelete = (note: Note) => {
+    setDoneId(null);
+    deleteWithUndo(note);
+  };
+
+  // a done to-do is simply deleted, with the same Undo as a delete
+  const handleDone = (note: Note) => {
+    setDoneId(note._id);
+    deleteWithUndo(note);
+  };
 
   // Deleting a folder never deletes notes: they move to General (on the
   // server). A folder with notes asks first, saying so.
@@ -454,6 +465,7 @@ export default function NotesListScreen() {
                   note={item}
                   onPress={() => navigation.navigate("AddEditNote", { note: item })}
                   onDelete={() => handleDelete(item)}
+                  onDone={() => handleDone(item)}
                   places={places}
                   categoryColors={categoryColors}
                 />
@@ -528,8 +540,11 @@ export default function NotesListScreen() {
 
       {undoNote && (
         <UndoBar
-          message="Note deleted"
-          onUndo={undoDelete}
+          message={undoNote._id === doneId ? "Marked done" : "Note deleted"}
+          onUndo={() => {
+            setDoneId(null);
+            undoDelete();
+          }}
           style={[styles.undoBar, { right: FAB_SIZE + FAB_MARGIN * 2 }]}
         />
       )}

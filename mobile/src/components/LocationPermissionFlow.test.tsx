@@ -26,7 +26,7 @@ describe("background location disclosure", () => {
     const text = await disclosureText();
     expect(text).toContain("Smart Mind collects location data");
     expect(text).toMatch(/arrive at your saved places/);
-    expect(text).toMatch(/near stores for your errands/);
+    expect(text).toMatch(/near stores for your shopping notes/);
     expect(text).toContain("even when the app is closed or not in use");
   });
 

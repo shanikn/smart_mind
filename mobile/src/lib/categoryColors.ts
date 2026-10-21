@@ -13,7 +13,7 @@ export const DEFAULT_CATEGORY_COLORS: CategoryColors = {
   event: "#C2185B",
 };
 
-const LABELS: CategoryColors = { todo: "To-do", errand: "Errand", idea: "Idea", event: "Event" };
+const LABELS: CategoryColors = { todo: "To-do", errand: "Shopping", idea: "Idea", event: "Event" };
 
 // basic colors offered before the custom color wheel
 export const BASIC_SWATCHES = [

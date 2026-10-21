@@ -87,9 +87,10 @@ describe("away at the time, then arriving later the same day", () => {
     expect(missedPlaceTimeNotes([n], GYM, at(19), at(8).getTime(), {})).toEqual([]);
   });
 
-  test("a note about arriving isn't repeated: the arrival alert already shows it", () => {
+  test("a note about arriving with a time is handled like any timed note: missed, so it alerts once", () => {
     const n = homeAt1754({ content: "when I get home at 17:54 feed the cat" });
-    expect(missedPlaceTimeNotes([n], HOME, at(19), at(8).getTime(), {})).toEqual([]);
+    expect(missedPlaceTimeNotes([n], HOME, at(19), at(8).getTime(), {}).map((x) => x._id)).toEqual([n._id]);
+    expect(missedPlaceTimeNotes([n], HOME, at(16), at(8).getTime(), {})).toEqual([]);
   });
 
   test("no exit on record (e.g. just installed): arriving counts as having been away", () => {

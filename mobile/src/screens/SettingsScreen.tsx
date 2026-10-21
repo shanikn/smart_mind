@@ -711,8 +711,8 @@ export default function SettingsScreen() {
             onValueChange={handleToggleNotifications}
           />
           <ToggleRow
-            title="Errand alerts near stores"
-            caption="When you have errands and walk into any supermarket, pharmacy or post office nearby."
+            title="Shopping alerts near stores"
+            caption="When you have shopping notes and walk into any supermarket, pharmacy or post office nearby."
             value={storeAlertsEnabled}
             onValueChange={handleToggleStoreAlerts}
           />

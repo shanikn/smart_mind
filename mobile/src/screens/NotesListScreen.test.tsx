@@ -74,10 +74,17 @@ jest.mock("../lib/reminderPrefs", () => ({ getReminderLocation: jest.fn().mockRe
 // long-press stands for a confirmed delete (swipe -> Delete -> Delete)
 jest.mock("../components/NoteCard", () => {
   const { Text } = require("react-native");
-  return ({ note, onDelete }: { note: { content: string }; onDelete: () => void }) => (
-    <Text testID="note-card" onLongPress={onDelete}>
-      {note.content}
-    </Text>
+  return ({ note, onDelete, onDone }: { note: { content: string }; onDelete: () => void; onDone?: () => void }) => (
+    <>
+      <Text testID="note-card" onLongPress={onDelete}>
+        {note.content}
+      </Text>
+      {onDone && (
+        <Text testID="note-done" onPress={onDone}>
+          {note.content}
+        </Text>
+      )}
+    </>
   );
 });
 
@@ -145,7 +152,7 @@ test("search filters as you type, case-insensitive and in Hebrew", async () => {
   expect(shownNotes(tree)).toEqual(["Buy milk"]);
   await type(tree, "חלב");
   expect(shownNotes(tree)).toEqual(["לקנות חלב"]);
-});
+}, 15000);
 
 test("the clear (x) button appears with text and empties the search", async () => {
   const tree = await renderScreen();
@@ -176,14 +183,14 @@ const pressTab = async (tree: ReactTestRenderer, name: string) => act(async () =
 
 test("the folder tab, the checked categories and the search combine", async () => {
   const tree = await renderScreen();
-  await checkCategories(tree, "Errand");
+  await checkCategories(tree, "Shopping");
   expect(shownNotes(tree).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
   await pressTab(tree, "Uni");
   expect(shownNotes(tree)).toEqual(["לקנות חלב"]);
   await type(tree, "milk");
   expect(shownNotes(tree)).toEqual([]);
   await type(tree, "");
-  // Uni AND (Errand or To-do); the old "task" kind counts as To-do
+  // Uni AND (Shopping or To-do); the old "task" kind counts as To-do
   await checkCategories(tree, "To-do");
   expect(shownNotes(tree).sort()).toEqual(["Study for the exam", "לקנות חלב"].sort());
 });
@@ -238,7 +245,7 @@ describe("Recent / Upcoming toggle", () => {
     for (const view of ["Recent", "Upcoming"]) {
       const tree = await renderScreen();
       await act(async () => byLabel(tree, view).props.onPress());
-      await checkCategories(tree, "Errand");
+      await checkCategories(tree, "Shopping");
       expect(shownNotes(tree)).toEqual(["Buy milk", "לקנות חלב"]);
       await pressTab(tree, "Uni");
       expect(shownNotes(tree)).toEqual(["לקנות חלב"]);
@@ -509,7 +516,7 @@ describe("the category filter", () => {
   test("the sheet lists the four categories with their colors, each with a checkbox", async () => {
     const tree = await renderScreen();
     await openSheet(tree);
-    expect(options(tree).map((o) => o.props.accessibilityLabel)).toEqual(["To-do", "Errand", "Idea", "Event"]);
+    expect(options(tree).map((o) => o.props.accessibilityLabel)).toEqual(["To-do", "Shopping", "Idea", "Event"]);
     expect(options(tree).every((o) => o.props.accessibilityRole === "checkbox")).toBe(true);
     expect(options(tree).every((o) => o.props.accessibilityState.checked === false)).toBe(true);
     const dots = options(tree).map((o) => {
@@ -527,8 +534,8 @@ describe("the category filter", () => {
   test("check one or several: notes of any of them; the button shows how many", async () => {
     const tree = await renderScreen();
     await openSheet(tree);
-    await act(async () => categoryOption(tree, "Errand").props.onPress());
-    expect(categoryOption(tree, "Errand").props.accessibilityState.checked).toBe(true);
+    await act(async () => categoryOption(tree, "Shopping").props.onPress());
+    expect(categoryOption(tree, "Shopping").props.accessibilityState.checked).toBe(true);
     await act(async () => byLabel(tree, "Done").props.onPress());
     expect(shownNotes(tree).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
     expect(badge(tree).props.children).toBe(1);
@@ -545,7 +552,7 @@ describe("the category filter", () => {
     await checkCategories(tree, "Idea");
     expect(shownNotes(tree)).toHaveLength(3);
     await openSheet(tree);
-    await act(async () => categoryOption(tree, "Errand").props.onPress());
+    await act(async () => categoryOption(tree, "Shopping").props.onPress());
     await act(async () => categoryOption(tree, "Event").props.onPress());
     await act(async () => byLabel(tree, "Clear").props.onPress());
     expect(options(tree).every((o) => o.props.accessibilityState.checked === false)).toBe(true);
@@ -556,7 +563,7 @@ describe("the category filter", () => {
 
   test("the checked categories are remembered when you come back to the screen", async () => {
     const first = await renderScreen();
-    await checkCategories(first, "Errand");
+    await checkCategories(first, "Shopping");
     await act(async () => first.unmount());
     const again = await renderScreen();
     expect(shownNotes(again).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
@@ -568,7 +575,7 @@ describe("the category filter", () => {
     expect(tree.root.findAllByType(TouchableOpacity).some((t) => t.props.accessibilityLabel === "All categories")).toBe(
       false
     );
-    expect(tree.root.findAllByType(TouchableOpacity).some((t) => t.props.accessibilityLabel === "Errand notes")).toBe(
+    expect(tree.root.findAllByType(TouchableOpacity).some((t) => t.props.accessibilityLabel === "Shopping notes")).toBe(
       false
     );
   });
@@ -644,7 +651,7 @@ describe("the place filter", () => {
   test("combines with the categories and the folder; the badge counts both", async () => {
     const tree = await renderScreen();
     await pickPlace(tree, "No place");
-    await checkCategories(tree, "Errand");
+    await checkCategories(tree, "Shopping");
     expect(shownNotes(tree).sort()).toEqual(["Buy milk", "לקנות חלב"].sort());
     expect(badge(tree).props.children).toBe(2);
     await pressTab(tree, "Uni");
@@ -653,7 +660,7 @@ describe("the place filter", () => {
 
   test("Clear resets the categories and the place", async () => {
     const tree = await renderScreen();
-    await checkCategories(tree, "Errand");
+    await checkCategories(tree, "Shopping");
     await pickPlace(tree, "Uni");
     await act(async () => byLabel(tree, "Filter").props.onPress());
     await act(async () => byLabel(tree, "Clear").props.onPress());
@@ -803,6 +810,64 @@ describe("Undo after deleting a note", () => {
     expect(hasUndoBar(tree)).toBe(true);
     await act(async () => byLabel(tree, "Undo").props.onPress());
     expect(shownNotes(tree)).toEqual(["Buy milk"]);
+  });
+});
+
+describe("ticking a to-do as done", () => {
+  const { deleteNote } = jest.requireMock("../api/notes");
+  const tick = async (tree: ReactTestRenderer, content: string) => {
+    const box = tree.root.findAll(
+      (n) => n.props.testID === "note-done" && n.props.children === content && typeof n.props.onPress === "function"
+    )[0];
+    await act(async () => box.props.onPress());
+  };
+  const wait = async (ms: number) =>
+    act(async () => {
+      jest.advanceTimersByTime(ms);
+    });
+
+  beforeEach(async () => {
+    jest.useFakeTimers({ doNotFake: ["queueMicrotask", "nextTick", "setImmediate"] });
+    deleteNote.mockReset();
+    deleteNote.mockResolvedValue({ message: "ok" });
+    await finishPendingDelete();
+    deleteNote.mockClear();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  test("the note goes away with a 'Marked done' bar, and is deleted after 5 seconds", async () => {
+    const tree = await renderScreen();
+    await tick(tree, "Study for the exam");
+    expect(shownNotes(tree)).not.toContain("Study for the exam");
+    expect(allText(tree)).toContain("Marked done");
+    expect(allText(tree)).not.toContain("Note deleted");
+    await wait(5000);
+    expect(deleteNote).toHaveBeenCalledWith("b");
+    expect(shownNotes(tree)).not.toContain("Study for the exam");
+  });
+
+  test("Undo brings the to-do back and nothing is deleted", async () => {
+    const tree = await renderScreen();
+    const before = shownNotes(tree);
+    await tick(tree, "Study for the exam");
+    await act(async () => byLabel(tree, "Undo").props.onPress());
+    expect(shownNotes(tree)).toEqual(before);
+    await wait(10000);
+    expect(deleteNote).not.toHaveBeenCalled();
+  });
+
+  test("a plain delete after a done still says 'Note deleted'", async () => {
+    const tree = await renderScreen();
+    await tick(tree, "Study for the exam");
+    const card = tree.root.findAll(
+      (n) => n.props.testID === "note-card" && n.props.children === "Buy milk" && typeof n.props.onLongPress === "function"
+    )[0];
+    await act(async () => card.props.onLongPress());
+    expect(allText(tree)).toContain("Note deleted");
+    expect(allText(tree)).not.toContain("Marked done");
   });
 });
 

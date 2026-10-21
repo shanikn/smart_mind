@@ -245,11 +245,11 @@ describe("once per store visit", () => {
 test("the message lists the errands for that store", () => {
   const errands = [note("buy milk"), note("get carrots")];
   expect(storeAlertMessage("Shufersal", errands)).toEqual({
-    title: "Errands nearby",
-    body: "You're at Shufersal – you have errands: buy milk, get carrots",
+    title: "Shopping nearby",
+    body: "You're at Shufersal – on your list: buy milk, get carrots",
   });
   const five = ["a", "b", "c", "d", "e"].map((c) => note(c));
-  expect(storeAlertMessage("AM:PM", five).body).toBe("You're at AM:PM – you have errands: a, b, c and 2 more");
+  expect(storeAlertMessage("AM:PM", five).body).toBe("You're at AM:PM – on your list: a, b, c and 2 more");
   const long = note("x".repeat(80));
   expect(storeAlertMessage("S", [long]).body.length).toBeLessThan(90);
 });

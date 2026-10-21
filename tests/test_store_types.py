@@ -59,3 +59,75 @@ def test_list_notes_reports_the_store_type():
     assert by_id[errand]["category"] == "errand"
     assert by_id[errand]["store_type"] == "pharmacy"
     assert by_id[todo]["store_type"] is None
+
+
+# Hebrew shopping notes and notes naming a supermarket chain are errands, so
+# they alert near any supermarket (Rami Levi included).
+def test_hebrew_shopping_is_an_errand():
+    for text in ("לקנות חלב", "קניות לשבת", "ללכת לסופר", "לקפוץ למכולת", "וגם לקנות לחם"):
+        assert categorize(text) == "errand", text
+        assert infer_store_type(text) == "supermarket", text
+
+
+def test_supermarket_chains_are_errands():
+    for text in ("Rami Levi: milk, bread", "rami levy tomorrow", "Shufersal - eggs",
+                 "חלב ברמי לוי", "שופרסל: ביצים", "ביוחננוף", "אושר עד"):
+        assert categorize(text) == "errand", text
+        assert infer_store_type(text) == "supermarket", text
+
+
+def test_hebrew_pharmacy_and_post_office():
+    assert infer_store_type("לקנות תרופות") == "pharmacy"
+    assert infer_store_type("לקנות ויטמינים בסופר פארם") == "pharmacy"
+    assert categorize("בית מרקחת") == "errand"
+    assert infer_store_type("לאסוף חבילה מהדואר") == "post_office"
+    assert categorize("לאסוף חבילה מהדואר") == "errand"
+
+
+def test_hebrew_words_inside_other_words_dont_count():
+    # "סופרת" (counts) isn't "סופר", "קניונים" (malls) isn't "קניות"
+    assert categorize("היא סופרת את הימים") == "todo"
+    assert categorize("רשימת קניונים") == "todo"
+
+
+# toiletries and cosmetics are drugstore (Super-Pharm) errands
+def test_toiletries_go_to_the_drugstore():
+    for text in ("buy face soap", "get shampoo and toothpaste", "sunscreen", "Super-Pharm: deodorant",
+                 "superpharm", "לקנות סבון פנים", "שמפו ומרכך", "משחת שיניים", "קרם הגנה", "סופרפארם"):
+        assert categorize(text) == "errand", text
+        assert infer_store_type(text) == "pharmacy", text
+
+
+def test_food_with_cream_stays_at_the_supermarket():
+    assert infer_store_type("buy ice cream") == "supermarket"
+    assert infer_store_type("לקנות שמנת") == "supermarket"
+
+
+# The errand kind is shown as "Shopping": only things you get or send at a
+# store. Going somewhere or chores aren't shopping and mustn't alert near
+# supermarkets.
+def test_chores_and_going_places_are_todos_not_shopping():
+    for text in ("walk the dog", "take out the trash", "go to the bank", "pick up the kids",
+                 "get the kids from school", "water the plants", "take the car to the garage",
+                 "run errands"):
+        assert categorize(text) == "todo", text
+
+
+def test_buying_and_picking_up_things_is_still_shopping():
+    for text in ("buy milk", "get carrots", "pick up Maybelline mascara", "pick up the package",
+                 "go to the pharmacy", "go to the supermarket", "consider going to the store",
+                 "take the parcel to the post office", "pick up my prescription"):
+        assert categorize(text) == "errand", text
+
+
+# CodeRabbit on PR #6: picking up a person or a chore isn't shopping
+def test_picking_up_people_and_chores_is_not_shopping():
+    for text in ("pick up the trash", "pick up Sarah from school", "pick up Noa", "pick up the laundry",
+                 "pick up the toys", "pick up my room", "pick up the phone"):
+        assert categorize(text) == "todo", text
+
+
+def test_picking_up_things_is_still_shopping():
+    for text in ("pick up bread", "pick up a cake", "pick up the package", "pick up my prescription",
+                 "pick up Maybelline mascara"):
+        assert categorize(text) == "errand", text

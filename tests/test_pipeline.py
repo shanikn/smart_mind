@@ -10,7 +10,7 @@ from tests.support import delete_any, note_doc, update_any  # noqa: E402
 def test_processor():
     note = Note(content="walk Libby")
     process_new_notes(note)
-    assert note.category == "errand"
+    assert note.category == "todo"  # walking the dog isn't shopping
     delete_any(note.id)
 
 

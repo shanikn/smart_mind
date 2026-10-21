@@ -80,7 +80,7 @@ test("offline, the once-per-visit rule still holds", async () => {
   expect(notify).toHaveBeenCalledTimes(1);
 });
 
-test("offline, a timed note still waits for its alarm unless it's about arriving", async () => {
+test("offline, a timed note still waits for its alarm, even when it's about arriving", async () => {
   await saveAlertNotes(
     [
       note("t1", "call mom at 20:00", { contexts: ["id-home", "20:00"], reminder_time_source: "text" }),
@@ -93,7 +93,7 @@ test("offline, a timed note still waits for its alarm unless it's about arriving
   );
   fromServer.mockRejectedValue(new TypeError("Network request failed"));
   await checkAndNotifyReminders({ onArrival: true });
-  expect(notify.mock.calls.map((c) => c[0].content.body)).toEqual(["when I get home at 20:00 feed the cat"]);
+  expect(notify).not.toHaveBeenCalled();
 });
 
 test("another user's saved notes are never shown", async () => {

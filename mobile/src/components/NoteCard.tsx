@@ -4,25 +4,28 @@ import { Ionicons } from "@expo/vector-icons";
 import { Swipeable } from "react-native-gesture-handler";
 import { Note } from "../types/notes";
 import { ServerPlace } from "../lib/userPlaces";
-import { CategoryColors } from "../lib/categoryColors";
+import { CategoryColors, normalizeCategory } from "../lib/categoryColors";
 import { noteCardInfo } from "../lib/noteCardInfo";
 import { IconTile } from "./ui";
-import { Theme, fonts, radius } from "../theme";
+import { MIN_TOUCH_TARGET, Theme, fonts, radius } from "../theme";
 import { useTheme, useThemedStyles } from "../ThemeContext";
 
 interface NoteCardProps {
   note: Note;
   onPress: () => void;
   onDelete: () => void;
+  // ticking a to-do's or shopping note's checkbox: the list deletes it with a "Marked done" Undo bar
+  onDone?: () => void;
   places: ServerPlace[];
   categoryColors: CategoryColors;
 }
 
-export default function NoteCard({ note, onPress, onDelete, places, categoryColors }: NoteCardProps) {
+export default function NoteCard({ note, onPress, onDelete, onDone, places, categoryColors }: NoteCardProps) {
   const { colors, type } = useTheme();
   const styles = useThemedStyles(makeStyles);
   // the palette decides whether the category name is readable on the card
   const info = noteCardInfo(note, places, categoryColors, colors);
+  const showCheckbox = onDone !== undefined && ["todo", "errand"].includes(normalizeCategory(note.category));
 
   const renderRightActions = () => (
     <TouchableOpacity
@@ -40,6 +43,17 @@ export default function NoteCard({ note, onPress, onDelete, places, categoryColo
   return (
     <Swipeable renderRightActions={renderRightActions} overshootRight={false} rightThreshold={40}>
       <TouchableOpacity style={styles.card} onPress={onPress} onLongPress={onDelete}>
+        {showCheckbox && (
+          <TouchableOpacity
+            style={styles.checkbox}
+            onPress={onDone}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: false }}
+            accessibilityLabel="Mark done"
+          >
+            <Ionicons name="ellipse-outline" size={26} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
         <IconTile icon={info.icon} backgroundColor={info.tileColor} iconColor={info.tileIconColor} />
 
         <View style={styles.body}>
@@ -111,6 +125,15 @@ const makeStyles = ({ colors, type }: Theme) =>
     borderColor: colors.border,
     paddingVertical: 12,
     paddingHorizontal: 16,
+  },
+  // a 44pt target; the negative margin keeps the card's left padding visually the same
+  checkbox: {
+    width: MIN_TOUCH_TARGET,
+    height: MIN_TOUCH_TARGET,
+    marginLeft: -9,
+    marginRight: -6,
+    alignItems: "center",
+    justifyContent: "center",
   },
   body: { flex: 1 },
   content: { writingDirection: "auto" },
