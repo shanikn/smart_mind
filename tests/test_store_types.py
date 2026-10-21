@@ -118,3 +118,16 @@ def test_buying_and_picking_up_things_is_still_shopping():
                  "go to the pharmacy", "go to the supermarket", "consider going to the store",
                  "take the parcel to the post office", "pick up my prescription"):
         assert categorize(text) == "errand", text
+
+
+# CodeRabbit on PR #6: picking up a person or a chore isn't shopping
+def test_picking_up_people_and_chores_is_not_shopping():
+    for text in ("pick up the trash", "pick up Sarah from school", "pick up Noa", "pick up the laundry",
+                 "pick up the toys", "pick up my room", "pick up the phone"):
+        assert categorize(text) == "todo", text
+
+
+def test_picking_up_things_is_still_shopping():
+    for text in ("pick up bread", "pick up a cake", "pick up the package", "pick up my prescription",
+                 "pick up Maybelline mascara"):
+        assert categorize(text) == "errand", text

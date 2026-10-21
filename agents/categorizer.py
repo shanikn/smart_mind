@@ -41,7 +41,7 @@ supermarket_chains = [
 drugstore_words = [
     "super-pharm", "super pharm", "superpharm", "good pharm", "drugstore",
     "soap", "face soap", "face wash", "shampoo", "conditioner", "toothpaste", "toothbrush",
-    "deodorant", "sunscreen", "moisturizer", "face cream", "makeup", "razors", "cotton pads",
+    "deodorant", "sunscreen", "moisturizer", "face cream", "makeup", "mascara", "lipstick", "razors", "cotton pads",
     "סופר פארם", "סופרפארם", "גוד פארם", "סבון", "סבון פנים", "שמפו", "מרכך", "משחת שיניים",
     "מברשת שיניים", "דאודורנט", "קרם הגנה", "קרם פנים", "קרם לחות", "איפור", "סכיני גילוח",
 ]
@@ -53,12 +53,16 @@ hebrew_errand = [
 ]
 # "get carrots" is an errand, but "get to the exam", "get up early" or
 # "get ready" are not: get/grab/pick up count only when an item follows,
-# and not a person ("pick up the kids")
+# not a person ("pick up the kids", "pick up Sarah") or a chore ("pick up
+# the trash"). A capitalized word after "pick up" is taken as a name.
 _PEOPLE = r"(the\s+|my\s+)?(kids?|children|son|daughter|baby|mom|dad|grandma|grandpa|friends?|him|her|them|me|us)\b"
+_PICKUP_CHORES = r"(the\s+|my\s+|your\s+)?(trash|garbage|rubbish|laundry|toys|mess|room|clothes|dishes|phone|call)\b"
 weak_errand = re.compile(
     r"\b(get|grab|pick\s+up)\s+(?!(to|up|ready|back|home|out|there|in|on|off|started|better)\b)"
-    r"(?!" + _PEOPLE + r")\w"
+    r"(?!" + _PEOPLE + r")(?!" + _PICKUP_CHORES + r")\w"
 )
+# run on the original text, before lower-casing
+_PICKUP_NAME = re.compile(r"\b[Pp]ick\s+up\s+[A-Z][a-z]")
 
 # Which kind of store an errand needs, for alerts near any such store.
 # Checked in order; anything else (food, groceries...) is the supermarket.
@@ -114,6 +118,14 @@ def _has_term(content, term):
     return bool(re.search(prefix + re.escape(term) + r"(?![\u05d0-\u05ea])", content))
 
 
+def _picks_up_a_name(content: str, lower: str) -> bool:
+    """"pick up Sarah": a capitalized word after "pick up", and no get/grab
+    of something else in the note."""
+    if not _PICKUP_NAME.search(content):
+        return False
+    return not re.search(r"\b(get|grab)\s+\w", re.sub(r"\bpick\s+up\b", "", lower))
+
+
 def categorize(content: str) -> str:
     """One of KINDS. Order: an explicit idea, then an event, then an errand,
     then a hedged idea ("maybe", "consider"); everything else is a to-do."""
@@ -125,7 +137,7 @@ def categorize(content: str) -> str:
     elif (
         any(_has_word(lower, w) for w in errand)
         or any(_has_term(lower, w) for w in supermarket_chains + drugstore_words + hebrew_errand)
-        or weak_errand.search(lower)
+        or (weak_errand.search(lower) and not _picks_up_a_name(content, lower))
     ):
         result = "errand"
     elif any(_has_word(lower, w) for w in weak_idea_words):

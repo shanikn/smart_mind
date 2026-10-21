@@ -18,30 +18,36 @@ function Run([string]$Label, [scriptblock]$Cmd) {
 
 Set-Location $Repo
 
-if ($Target -ne "apk") {
-    Run "Switch to main" { git checkout main }
-}
-$branch = git branch --show-current
-Write-Host "Building from branch: $branch"
+try {
+    if ($Target -ne "apk") {
+        Run "Switch to main" { git checkout main }
+    }
+    $branch = git branch --show-current
+    Write-Host "Building from branch: $branch"
 
-$lockBefore = (Get-FileHash "mobile\package-lock.json").Hash
-Run "Pull $branch" { git pull }
-$lockAfter = (Get-FileHash "mobile\package-lock.json").Hash
+    $lockBefore = (Get-FileHash "mobile\package-lock.json").Hash
+    Run "Pull $branch" { git pull }
+    $lockAfter = (Get-FileHash "mobile\package-lock.json").Hash
 
-Set-Location "$Repo\mobile"
-if ($lockBefore -ne $lockAfter -or -not (Test-Path "node_modules")) {
-    Run "npm install (packages changed)" { npm install }
-}
+    Set-Location "$Repo\mobile"
+    if ($lockBefore -ne $lockAfter -or -not (Test-Path "node_modules")) {
+        Run "npm install (packages changed)" { npm install }
+    }
 
-switch ($Target) {
-    "apk"     { Run "EAS build: Android APK" { eas build --platform android --profile preview } }
-    "android" { Run "EAS build: Android for Play" { eas build --platform android --profile production } }
-    "ios"     { Run "EAS build: iOS + TestFlight" { eas build --platform ios --profile production --auto-submit } }
-}
+    switch ($Target) {
+        "apk"     { Run "EAS build: Android APK" { eas build --platform android --profile preview } }
+        "android" { Run "EAS build: Android for Play" { eas build --platform android --profile production } }
+        "ios"     { Run "EAS build: iOS + TestFlight" { eas build --platform ios --profile production --auto-submit } }
+    }
 
-if ($Target -ne "apk") {
-    Set-Location $Repo
-    Write-Host "`n=== Back to dev ===" -ForegroundColor Cyan
-    git checkout dev
+    Write-Host "`nDone." -ForegroundColor Green
 }
-Write-Host "`nDone." -ForegroundColor Green
+finally {
+    # back to dev even when a step failed
+    if ($Target -ne "apk") {
+        Set-Location $Repo
+        Write-Host "`n=== Back to dev ===" -ForegroundColor Cyan
+        git checkout dev
+        if ($LASTEXITCODE -ne 0) { Write-Warning "Couldn't switch back to dev; run: git checkout dev" }
+    }
+}
