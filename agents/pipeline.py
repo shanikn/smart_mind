@@ -4,9 +4,9 @@ from agents.clock import local_now
 from agents.ingestion import ingest_note
 from agents.categorizer import (
     categorize, infer_place, infer_time, has_written_clock, is_about_arriving,
-    infer_date, default_time_for, DATE_ONLY_TIME, infer_store_type,
+    is_about_leaving, infer_date, default_time_for, DATE_ONLY_TIME, infer_store_type,
 )
-from agents.relevance import get_relevant_notes, collection
+from agents.relevance import get_relevant_notes, collection, alert_on  # noqa: F401 (alert_on for the API)
 from agents.ranking_policy import apply_feedback
 from notepad import (
     save_note, update_note, delete_note, Note, get_all_notes, dict_to_note,
@@ -119,9 +119,14 @@ def compute_enrichment(note: Note, places: list, now: datetime) -> dict:
     contexts = [place.id] if place else []
     # use manual hour override if set, otherwise infer
     # from content or fall back to the place's default.
-    # "when I get home ..." alerts on arriving, so it gets no guessed time:
-    # only a clock time written in it ("when I get home at 18:00")
-    arriving = is_about_arriving(note.content)
+    # "when I get home ..." alerts on arriving (and "when I leave home ..."
+    # on leaving), so it gets no guessed time: only a clock time written in
+    # it ("when I get home at 18:00"). Same when the user chose arriving or
+    # leaving for the note.
+    arriving = (
+        is_about_arriving(note.content) or is_about_leaving(note.content)
+        or note.place_trigger is not None
+    )
     if note.remind_time_explicit and note.remind_at_hour is not None:
         minute = note.remind_at_minute or 0
         time = f"{note.remind_at_hour:02d}:{minute:02d}"
@@ -175,8 +180,9 @@ def get_reminders(
     hour: Optional[int] = None,
     minute: Optional[int] = None,
     user_id: Optional[str] = None,
+    event: Optional[str] = None,
 ):
-    return get_relevant_notes(query, location, hour, minute, user_id)
+    return get_relevant_notes(query, location, hour, minute, user_id, event)
 
 
 def process_feedback(note: Note, action: str):

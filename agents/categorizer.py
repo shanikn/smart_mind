@@ -391,6 +391,32 @@ def is_about_arriving(content: str) -> bool:
     return bool(_arrival_english.search(lower) or _arrival_hebrew.search(lower))
 
 
+# ---- notes about leaving ("when I leave home ...") ----
+#
+# They alert on walking out of the place's radius. Like arrival notes they
+# get no guessed time, and they belong to the place they leave. Same rule:
+# a time word comes first, so "leave a message" is an ordinary to-do.
+_leaving_english = re.compile(
+    r"\b(on my way out"
+    r"|(when|once|after|before|as soon as) i (leave|head out|go out|get out)\b"
+    r"|(when|once|before) i'?m (leaving|heading out)\b"
+    r"|(when|once|before) i am (leaving|heading out)\b)"
+)
+# כש / ברגע ש / לפני ש / אחרי ש, maybe אני, then a verb of leaving:
+# אצא יוצא(ת) נצא, אעזוב עוזב(ת) נעזוב
+_leaving_hebrew = re.compile(
+    "(?:כש|ברגע ש|לפני ש|אחרי ש)"
+    "(?:אני\\s+)?"
+    "(?:אצא|יוצאת?|נצא"
+    "|אעזוב|עוזבת?|נעזוב)"
+)
+
+
+def is_about_leaving(content: str) -> bool:
+    lower = content.lower().replace("’", "'")
+    return bool(_leaving_english.search(lower) or _leaving_hebrew.search(lower))
+
+
 def _arrival_destination(content: str, places: list):
     """For a note about arriving, the Home/Uni/Work place it's going to."""
     tokens = _tokens(content)
@@ -555,7 +581,8 @@ def match_place_by_name(content: str, places: list):
 def infer_place(content: str, places: list):
     """The user's place a note belongs to, or None.
     1. a place the note names (match_place_by_name)
-    1b. for a note about arriving, where it's going ("when I get home")
+    1b. for a note about arriving, where it's going ("when I get home"),
+        or about leaving, where it leaves ("when I leave work")
     2. the built-in keywords of Home / Uni / Work
     3. semantic similarity between the note and each place's name + keywords
     """
@@ -564,7 +591,7 @@ def infer_place(content: str, places: list):
     named = match_place_by_name(content, places)
     if named:
         return named
-    if is_about_arriving(content):
+    if is_about_arriving(content) or is_about_leaving(content):
         destination = _arrival_destination(content, places)
         if destination:
             return destination

@@ -51,6 +51,7 @@ class Note:
     remind_at_minute: Optional[int] = None  # manual override minute (0-59)
     remind_on_date: Optional[str] = None  # YYYY-MM-DD; set to today at save time if not provided
     user_id: Optional[str] = None
+    place_trigger: Optional[str] = None  # chosen by the user: "arrive" or "leave"; None = from the text
 
 
 # helper functions
@@ -79,6 +80,7 @@ def note_to_dict(note: Note) -> dict:
         "remind_at_minute": note.remind_at_minute,
         "remind_on_date": note.remind_on_date,
         "user_id": note.user_id,
+        "place_trigger": note.place_trigger,
     }
 
 
@@ -107,6 +109,7 @@ def dict_to_note(d: dict) -> Note:
         remind_at_minute=d.get("remind_at_minute"),
         remind_on_date=d.get("remind_on_date"),
         user_id=d.get("user_id"),
+        place_trigger=d.get("place_trigger"),
     )
 
 

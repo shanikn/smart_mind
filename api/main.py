@@ -8,7 +8,7 @@ load_dotenv()
 
 import re  # noqa: E402
 from datetime import date, datetime, timezone  # noqa: E402
-from typing import Annotated, List, Union  # noqa: E402
+from typing import Annotated, List, Literal, Union  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr  # noqa: E402
 from fastapi import Body, FastAPI, Header, HTTPException, Query  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
@@ -18,7 +18,7 @@ from notepad import (  # noqa: E402
 )
 from agents.pipeline import (  # noqa: E402
     enrich_note, full_delete, process_feedback,
-    get_reminders, process_all_notes, reminder_time_source, store_type, sync_vectors,
+    get_reminders, process_all_notes, reminder_time_source, store_type, sync_vectors, alert_on,
     delete_user_data,
     reenrich_user_notes, untag_place,
 )
@@ -50,6 +50,10 @@ MAX_NOTE_CHARS = 5000
 MAX_SEARCH_CHARS = 200
 
 
+# when a note with a place alerts: on arriving there, or on leaving it
+PlaceTrigger = Literal["arrive", "leave"]
+
+
 class NoteRequest(BaseModel):
     content: str = Field(..., max_length=MAX_NOTE_CHARS)
     list_name: str = "General"
@@ -63,6 +67,7 @@ class NoteRequest(BaseModel):
     remind_at_hour: Optional[int] = None
     remind_at_minute: Optional[int] = None
     remind_on_date: Optional[str] = None
+    place_trigger: Optional[PlaceTrigger] = None
 
 
 class NoteUpdate(BaseModel):
@@ -84,6 +89,8 @@ class NoteUpdate(BaseModel):
     remind_at_minute: Optional[Union[StrictInt, StrictStr]] = None
     remind_on_date: Optional[str] = None
     reminders_enabled: bool = None
+    # "" or null: back to Smart (from the note's text)
+    place_trigger: Optional[Union[PlaceTrigger, Literal[""]]] = None
 
 
 app = FastAPI()
@@ -237,6 +244,7 @@ def create_note(
         remind_at_hour=request.remind_at_hour,
         remind_at_minute=request.remind_at_minute,
         remind_on_date=request.remind_on_date,
+        place_trigger=request.place_trigger,
         user_id=user_id,
     )
     save_note(note)
@@ -249,6 +257,16 @@ def create_note(
     return {"id": note.id, "content": note.content, "category": note.category}
 
 
+def _note_out(n: Note) -> dict:
+    """A note as the phone gets it, with what the server works out for it:
+    the time source (which times get an exact alarm), the store kind for an
+    errand, and when a place note alerts (alert_on: "arrive" or "leave")."""
+    return {
+        **note_to_dict(n), "reminder_time_source": reminder_time_source(n),
+        "store_type": store_type(n), "alert_on": alert_on(n),
+    }
+
+
 # get all notes
 @app.get("/notes/")
 def list_notes(authorization: Optional[str] = Header(None)):
@@ -259,7 +277,7 @@ def list_notes(authorization: Optional[str] = Header(None)):
     # tells the phone which times get an exact alarm (explicit/text) and
     # which are location defaults left to the location-aware polling
     return [
-        {**note_to_dict(n), "reminder_time_source": reminder_time_source(n), "store_type": store_type(n)}
+        _note_out(n)
         for n in notes
     ]
 
@@ -310,6 +328,7 @@ def _check_remind_date(value: Optional[str]) -> None:
 _REENRICH_FIELDS = {
     "content", "category", "category_explicit", "location_explicit", "location_value",
     "remind_date_explicit", "remind_time_explicit", "remind_at_hour", "remind_at_minute", "remind_on_date",
+    "place_trigger",
 }
 
 
@@ -344,6 +363,8 @@ def _note_fields(values: dict) -> dict:
         fields["remind_at_minute"] = _whole_number(values["remind_at_minute"], "remind_at_minute", 0, 59)
     if "remind_on_date" in values:
         fields["remind_on_date"] = values["remind_on_date"] or None
+    if "place_trigger" in values:
+        fields["place_trigger"] = values["place_trigger"] or None
     return fields
 
 
@@ -418,17 +439,20 @@ def change_note(
 def get_reminders_endpoint(
     location: str = "unknown", hour: Optional[int] = None,
     minute: Optional[int] = None,
+    event: Optional[PlaceTrigger] = None,
     authorization: Optional[str] = Header(None),
 ):
+    """event: the phone just arrived at the place ("arrive") or left it
+    ("leave"); see get_relevant_notes. None: every note for the place."""
     user_id = require_user_id(authorization)
     # location is a place name or id; search semantically by the name
     place = resolve_place(user_id, location)
     label = place.name if place else location
     query = f"{label} {hour}" if hour is not None else label
-    notes = get_reminders(query, location, hour, minute, user_id)
+    notes = get_reminders(query, location, hour, minute, user_id, event)
     # the phone uses the source to keep timed notes out of arrival alerts
     return [
-        {**note_to_dict(n), "reminder_time_source": reminder_time_source(n), "store_type": store_type(n)}
+        _note_out(n)
         for n in notes
     ]
 
