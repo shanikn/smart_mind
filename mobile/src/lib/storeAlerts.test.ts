@@ -17,6 +17,7 @@ import {
   shouldNotifyStore,
   STORE_RADIUS_M,
   storeAlertMessage,
+  storeMapsUrl,
   storeRegions,
   StoreCache,
   StoreVisits,
@@ -278,4 +279,10 @@ describe("stopping at a store (dwell)", () => {
     const after = forgetStoreVisit(visits, "store:supermarket:node/1");
     expect(shouldNotifyStore(after["store:supermarket:node/1"], NOW + MIN)).toBe(true);
   });
+});
+
+test("the alert's Google Maps link points at that store", () => {
+  expect(storeMapsUrl({ lat: 32.1001, lon: 34.8 })).toBe(
+    "https://www.google.com/maps/search/?api=1&query=32.1001%2C34.8"
+  );
 });
