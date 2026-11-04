@@ -239,3 +239,10 @@ describe("kinds on the card", () => {
     ).toEqual({ kind: "off" });
   });
 });
+
+test("a note that alerts on leaving says so next to its place", () => {
+  const leaving = note({ contexts: ["id-gym"], alert_on: "leave" });
+  expect(noteCardInfo(leaving, PLACES, DEFAULT_CATEGORY_COLORS).placeName).toBe("Leaving Gym");
+  const arriving = note({ contexts: ["id-gym"], alert_on: "arrive" });
+  expect(noteCardInfo(arriving, PLACES, DEFAULT_CATEGORY_COLORS).placeName).toBe("Gym");
+});

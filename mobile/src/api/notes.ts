@@ -1,6 +1,6 @@
 import { apiRequest, currentUserId } from "./client";
 import { removeAlertNote, saveAlertNotes } from "../services/alertNotesCache";
-import { Note } from "../types/notes";
+import { Note, PlaceTrigger } from "../types/notes";
 
 export async function createNote(
   content: string,
@@ -14,7 +14,8 @@ export async function createNote(
   remindTimeExplicit: boolean = false,
   remindAtHour?: number,
   remindAtMinute?: number,
-  remindOnDate?: string
+  remindOnDate?: string,
+  placeTrigger?: PlaceTrigger // on arriving or on leaving the place; left out = Smart
 ): Promise<{ id: string; content: string; category: string }> {
   return apiRequest("/notes/", {
     method: "POST",
@@ -31,6 +32,7 @@ export async function createNote(
       remind_at_hour: remindAtHour ?? null,
       remind_at_minute: remindAtMinute ?? null,
       remind_on_date: remindOnDate ?? null,
+      place_trigger: placeTrigger ?? null,
     }),
   });
 }
@@ -65,6 +67,7 @@ export async function updateNote(
     remind_at_minute?: number | string;
     remind_on_date?: string;
     reminders_enabled?: boolean;
+    place_trigger?: PlaceTrigger | ""; // "" = back to Smart
   }
 ): Promise<{ message: string }> {
   // as a JSON body: the note text doesn't belong in the URL (servers and

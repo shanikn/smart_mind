@@ -32,4 +32,11 @@ export interface Note {
     // from GET /notes/: for an errand, which kind of store it needs
     // ("supermarket" | "pharmacy" | "post_office"). Missing on an older backend.
     store_type?: string | null;
+    // from GET /notes/ and /reminders/: when a note with a place alerts, on
+    // arriving there or on leaving it. Missing on an older backend (= arrive).
+    alert_on?: PlaceTrigger | null;
+    // the user's choice in the edit screen; null = Smart (from the text)
+    place_trigger?: PlaceTrigger | null;
 }
+
+export type PlaceTrigger = "arrive" | "leave";

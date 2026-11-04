@@ -1,4 +1,4 @@
-import { arrivalCandidates, hasSpecificTime, isAboutArriving } from "./arrivalNotes";
+import { arrivalCandidates, arriveFirst, hasSpecificTime, isAboutArriving, leaveCandidates } from "./arrivalNotes";
 import { Note } from "../types/notes";
 
 let n = 0;
@@ -148,4 +148,41 @@ test("ideas never show up as arrival alerts", () => {
   const idea = note({ content: "idea for the house", category: "idea" });
   const todo = note({ content: "water the plants", category: "todo" });
   expect(arrivalCandidates([idea, todo])).toEqual([todo]);
+});
+
+describe("arriving or leaving (alert_on from the server)", () => {
+  test("notes that alert on leaving never show on arrival", () => {
+    const leave = note({ content: "when I leave home take the umbrella", alert_on: "leave" });
+    const plain = note({ content: "water the plants", alert_on: "arrive" });
+    expect(arrivalCandidates([leave, plain])).toEqual([plain]);
+  });
+
+  test("on leaving: only the notes about leaving, every one of them", () => {
+    const leaving = [1, 2, 3, 4].map((i) => note({ content: `leave thing ${i}`, alert_on: "leave" }));
+    const plain = note({ content: "water the plants", alert_on: "arrive" });
+    const older = note({ content: "an older backend sends no alert_on" });
+    expect(leaveCandidates([plain, ...leaving, older])).toEqual(leaving);
+  });
+
+  test("on leaving, a note with its own time still waits for its alarm", () => {
+    const timed = note({
+      content: "when I leave work at 18:00 call mom",
+      alert_on: "leave",
+      contexts: ["id-work", "18:00"],
+      reminder_time_source: "text",
+    });
+    expect(leaveCandidates([timed])).toEqual([]);
+  });
+
+  test("on leaving, alerts off or ideas never show", () => {
+    const off = note({ content: "leave a", alert_on: "leave", reminders_enabled: false });
+    const idea = note({ content: "leave b", alert_on: "leave", category: "idea" });
+    expect(leaveCandidates([off, idea])).toEqual([]);
+  });
+
+  test("a note set to On arrival by hand counts as an arrival note: first and never cut", () => {
+    const others = [1, 2, 3].map((i) => note({ content: `chore ${i}` }));
+    const chosen = note({ content: "feed the cat", place_trigger: "arrive", alert_on: "arrive" });
+    expect(arriveFirst([...others, chosen], 3)[0]).toBe(chosen);
+  });
 });

@@ -35,9 +35,15 @@ export function isAboutArriving(note: Note): boolean {
   return ARRIVAL_WORDS.test(note.content) || ARRIVAL_WORDS_HEBREW.test(note.content);
 }
 
+// the server's alert_on (agents/relevance.py): "when I leave home ..." or a
+// note set to On leaving alerts on walking out of the place, not in
+export function alertsOnLeaving(note: Note): boolean {
+  return note.alert_on === "leave";
+}
+
 // about arriving and no time of its own: the arrival is its moment
 function alertsOnArrival(note: Note): boolean {
-  return isAboutArriving(note) && !hasSpecificTime(note);
+  return (isAboutArriving(note) || note.place_trigger === "arrive") && !hasSpecificTime(note);
 }
 
 // Notes about arriving first, every one of them (they're why you came);
@@ -50,5 +56,15 @@ export function arriveFirst(notes: Note[], max: number = MAX_ARRIVAL_NOTES): Not
 }
 
 export function arrivalCandidates(notes: Note[], max: number = MAX_ARRIVAL_NOTES): Note[] {
-  return arriveFirst(notes.filter(canAlert).filter((n) => !hasSpecificTime(n)), max);
+  return arriveFirst(
+    notes.filter(canAlert).filter((n) => !hasSpecificTime(n) && !alertsOnLeaving(n)),
+    max
+  );
+}
+
+// Which notes to show when you leave a place: every note about leaving it
+// (the server already picked them for the place); a timed one waits for its
+// time, like on arrival.
+export function leaveCandidates(notes: Note[]): Note[] {
+  return notes.filter(canAlert).filter((n) => alertsOnLeaving(n) && !hasSpecificTime(n));
 }

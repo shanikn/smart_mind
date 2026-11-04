@@ -1,7 +1,7 @@
 import * as Notifications from "expo-notifications";
 
 import { getReminders } from "../api/reminders";
-import { Note } from "../types/notes";
+import { Note, PlaceTrigger } from "../types/notes";
 import {
   getNotificationsEnabled,
   getReminderLocation,
@@ -10,7 +10,7 @@ import {
 } from "../lib/reminderPrefs";
 import { getScheduledNoteIds } from "./scheduledReminders";
 import { canAlert } from "../lib/alertRules";
-import { arrivalCandidates } from "../lib/arrivalNotes";
+import { arrivalCandidates, leaveCandidates } from "../lib/arrivalNotes";
 import { offlineReminders } from "../lib/offlineArrival";
 import { currentUserId } from "../api/client";
 import { readAlertNotes } from "./alertNotesCache";
@@ -96,33 +96,41 @@ export async function ensureNotificationPermissions(): Promise<boolean> {
 
 // The server's choice for where I am; if it can't be reached (no signal, a
 // sign-in token that can't be refreshed offline...), the same choice made on
-// the phone from the notes saved at the last sync.
-export async function fetchCurrentReminders(): Promise<{
+// the phone from the notes saved at the last sync. With a place event: the
+// notes for arriving at the current place, or for leaving `place`.
+export async function fetchCurrentReminders(
+  event?: { type: PlaceTrigger; place?: string }
+): Promise<{
   reminders: Note[];
   location: string;
   offline: boolean;
 }> {
   const now = new Date();
-  const location = await getReminderLocation();
+  const location = event?.place ?? (await getReminderLocation());
   try {
-    const reminders = await getReminders(location, now.getHours(), now.getMinutes());
+    const reminders = await getReminders(location, now.getHours(), now.getMinutes(), event?.type);
     return { reminders, location, offline: false };
   } catch (e) {
     console.log("Reminders: server unreachable, using notes saved on the phone", e);
     const saved = await readAlertNotes(currentUserId());
-    return { reminders: offlineReminders(saved, location, now), location, offline: true };
+    return { reminders: offlineReminders(saved, location, now, event?.type), location, offline: true };
   }
 }
 
 export async function checkAndNotifyReminders(
-  options: { force?: boolean; onArrival?: boolean } = {}
+  // onLeave: the place id just left (the current location is already reset)
+  options: { force?: boolean; onArrival?: boolean; onLeave?: string } = {}
 ): Promise<ReminderCheckResult> {
   const notificationsEnabled = await getNotificationsEnabled();
   const permissionGranted = notificationsEnabled
     ? await ensureNotificationPermissions()
     : false;
 
-  const { reminders, location, offline } = await fetchCurrentReminders();
+  const onPlaceEvent = options.onArrival || options.onLeave !== undefined;
+  const event = options.onLeave !== undefined
+    ? { type: "leave" as const, place: options.onLeave }
+    : options.onArrival ? { type: "arrive" as const } : undefined;
+  const { reminders, location, offline } = await fetchCurrentReminders(event);
 
   if (!notificationsEnabled || !permissionGranted) {
     return {
@@ -143,15 +151,18 @@ export async function checkAndNotifyReminders(
   // filters them for the location); notes with a specific time wait for it,
   // even "when I'm home at 15:30 ...". Otherwise: only notes whose time is due now
   // (ideas never notify, even from an older backend that still returns them)
-  const candidates = options.onArrival ? arrivalCandidates(reminders) : reminders.filter(canAlert);
+  // leaving: every note about leaving that place, same rules
+  const candidates = options.onLeave !== undefined
+    ? leaveCandidates(reminders)
+    : options.onArrival ? arrivalCandidates(reminders) : reminders.filter(canAlert);
   // polling is the fallback: notes with an exact scheduled alarm are skipped
   // on the timed path so they don't notify twice
-  const scheduledIds = options.onArrival ? new Set<string>() : await getScheduledNoteIds();
+  const scheduledIds = onPlaceEvent ? new Set<string>() : await getScheduledNoteIds();
   // a note with a time and a watched place only alerts at its time if you're there
-  const where = options.onArrival ? null : { currentPlace: location, trackedPlaceIds: await trackedPlaceIds() };
+  const where = onPlaceEvent ? null : { currentPlace: location, trackedPlaceIds: await trackedPlaceIds() };
 
   for (const note of candidates) {
-    if (!options.onArrival && !isDueNow(note, now)) {
+    if (!onPlaceEvent && !isDueNow(note, now)) {
       continue;
     }
     if (where && needsToBeThere(note, where)) {

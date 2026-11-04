@@ -138,3 +138,39 @@ describe("Check now at a note's time", () => {
     expect(notify).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("leaving a place", () => {
+  test("asks the server for the notes about leaving that place, and shows them", async () => {
+    // the location was already reset to "Not at a place" by the Exit
+    await setReminderLocation("unknown");
+    fromServer.mockResolvedValue([note("l1", "take the umbrella", { alert_on: "leave" })]);
+    const result = await checkAndNotifyReminders({ onLeave: "id-home" });
+    expect(fromServer).toHaveBeenCalledWith("id-home", expect.any(Number), expect.any(Number), "leave");
+    expect(result.notifiedCount).toBe(1);
+    expect(notify.mock.calls[0][0].content.body).toBe("take the umbrella");
+  });
+
+  test("a note about arriving that an older server sends anyway is not shown", async () => {
+    fromServer.mockResolvedValue([note("a1", "water the plants", { alert_on: "arrive" })]);
+    const result = await checkAndNotifyReminders({ onLeave: "id-home" });
+    expect(result.notifiedCount).toBe(0);
+  });
+
+  test("offline: the saved notes about leaving that place", async () => {
+    await saveAlertNotes(
+      [note("l1", "take the umbrella", { alert_on: "leave" }), note("c1", "water the plants", { alert_on: "arrive" })],
+      "uid-a"
+    );
+    fromServer.mockRejectedValue(new TypeError("Network request failed"));
+    const result = await checkAndNotifyReminders({ onLeave: "id-home" });
+    expect(result.offline).toBe(true);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0][0].content.body).toBe("take the umbrella");
+  });
+
+  test("arriving asks only for notes about arriving", async () => {
+    fromServer.mockResolvedValue([]);
+    await checkAndNotifyReminders({ onArrival: true });
+    expect(fromServer).toHaveBeenCalledWith("id-home", expect.any(Number), expect.any(Number), "arrive");
+  });
+});

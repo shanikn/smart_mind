@@ -16,6 +16,7 @@ import { useNavigation, useRoute, useFocusEffect, RouteProp } from "@react-navig
 import { apiErrorMessage } from "../api/client";
 import { createNote, updateNote, getNotes } from "../api/notes";
 import { NotesStackParamList } from "../../App";
+import { PlaceTrigger } from "../types/notes";
 import { loadFolders } from "../services/foldersStore";
 import { folderNames, GENERAL } from "../lib/folderOrder";
 import { syncScheduledReminders } from "../services/scheduledReminders";
@@ -124,6 +125,8 @@ export default function AddEditNoteScreen() {
   // place id of the hand-picked location
   const [selectedLocation, setSelectedLocation] = useState(existingNote?.location_value || "");
   const [places, setPlaces] = useState<ServerPlace[]>([]);
+  // when a place note alerts: on arriving, on leaving, or null = Smart (the text decides)
+  const [placeTrigger, setPlaceTrigger] = useState<PlaceTrigger | null>(existingNote?.place_trigger ?? null);
   const [remindersEnabled, setRemindersEnabled] = useState(existingNote?.reminders_enabled ?? true);
   const [dateOverrideEnabled, setDateOverrideEnabled] = useState(
     existingNote?.remind_date_explicit ?? false
@@ -198,6 +201,7 @@ export default function AddEditNoteScreen() {
           remind_at_hour: reminderHour === null ? "" : String(reminderHour),
           remind_at_minute: reminderMinute === null ? "" : String(reminderMinute),
           reminders_enabled: remindersEnabled,
+          place_trigger: placeTrigger ?? "",
         });
       } else {
         await createNote(
@@ -212,7 +216,8 @@ export default function AddEditNoteScreen() {
           timeOverrideEnabled,
           reminderHour ?? undefined,
           reminderMinute ?? undefined,
-          reminderDate || undefined
+          reminderDate || undefined,
+          placeTrigger ?? undefined
         );
       }
       // reschedule exact alarms with the new time/date; not awaited so
@@ -389,6 +394,24 @@ export default function AddEditNoteScreen() {
               />
             ))}
           </ChipRow>
+          <Text style={[type.caption, styles.alertWhen]}>Alert</Text>
+          <ChipRow style={styles.chips}>
+            <Chip
+              label="Smart"
+              icon="sparkles-outline"
+              selected={placeTrigger === null}
+              onPress={() => setPlaceTrigger(null)}
+            />
+            <Chip label="On arrival" selected={placeTrigger === "arrive"} onPress={() => setPlaceTrigger("arrive")} />
+            <Chip label="On leaving" selected={placeTrigger === "leave"} onPress={() => setPlaceTrigger("leave")} />
+          </ChipRow>
+          {placeTrigger === null && (
+            <Text style={[type.caption, styles.alertHint]}>
+              {existingNote?.alert_on === "leave"
+                ? "Smart: on leaving the place (your note says so)."
+                : "Smart: on arriving, or on leaving when your note says \"when I leave\"."}
+            </Text>
+          )}
         </Card>
 
         <Card title="Folder">
@@ -457,6 +480,8 @@ const makeStyles = ({ colors, type }: Theme) =>
   resetRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   resetCaption: { flex: 1 },
   chips: { marginTop: 10 },
+  alertWhen: { marginTop: 14 },
+  alertHint: { marginTop: 6 },
   dates: { textAlign: "center" },
   deleteButton: { alignSelf: "center" },
 });

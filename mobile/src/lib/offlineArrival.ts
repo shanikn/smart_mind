@@ -1,6 +1,6 @@
-import { Note } from "../types/notes";
+import { Note, PlaceTrigger } from "../types/notes";
 import { canAlert } from "./alertRules";
-import { arriveFirst } from "./arrivalNotes";
+import { alertsOnLeaving, arriveFirst } from "./arrivalNotes";
 import { UNKNOWN } from "./userPlaces";
 
 // The server's choice of notes for a place (agents/relevance.py, the place
@@ -8,7 +8,8 @@ import { UNKNOWN } from "./userPlaces";
 // when the server can't be reached. Without the server there's no
 // meaning-based matching, so only notes tagged with the place count.
 // Like the server: notes about arriving first and never cut, others fill up
-// to 3, best score first and newest first on equal scores.
+// to 3, best score first and newest first on equal scores. On arriving,
+// notes about leaving stay out; on leaving, only those, every one.
 
 export const MAX_OFFLINE_REMINDERS = 3;
 const TIME_BONUS_MINUTES = 60;
@@ -54,7 +55,7 @@ function timeBonus(note: Note, now: Date): number {
   return 0;
 }
 
-export function offlineReminders(notes: Note[], location: string, now: Date): Note[] {
+export function offlineReminders(notes: Note[], location: string, now: Date, event?: PlaceTrigger): Note[] {
   if (!location || location === UNKNOWN) {
     return [];
   }
@@ -66,11 +67,12 @@ export function offlineReminders(notes: Note[], location: string, now: Date): No
         canAlert(n) &&
         !n.never_show &&
         !isSnoozed(n, now) &&
-        (n.remind_on_date == null || n.remind_on_date === today)
+        (n.remind_on_date == null || n.remind_on_date === today) &&
+        (event === undefined || alertsOnLeaving(n) === (event === "leave"))
     )
     .map((n, i) => ({ n, i, rank: score(n) + timeBonus(n, now), created: createdTime(n) }))
     // best first; newest first on equal scores (unknown times tie, keeping their order)
     .sort((a, b) => b.rank - a.rank || (a.created === b.created ? 0 : b.created > a.created ? 1 : -1) || a.i - b.i)
     .map(({ n }) => n);
-  return arriveFirst(ranked, MAX_OFFLINE_REMINDERS);
+  return event === "leave" ? ranked : arriveFirst(ranked, MAX_OFFLINE_REMINDERS);
 }

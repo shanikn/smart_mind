@@ -294,8 +294,54 @@ test("new note: title 'New note', starts in the given folder, Save creates it", 
     false,
     undefined,
     undefined,
+    undefined,
     undefined
   );
+});
+
+describe("alert at the place: on arriving or on leaving", () => {
+  // the third "Smart" chip (Category, Place, then this one)
+  const alertSmart = (tree: ReactTestRenderer) =>
+    tree.root.findAllByType(TouchableOpacity).filter((t) => t.props.accessibilityLabel === "Smart")[2];
+
+  test("Smart by default: the server decides from the text", async () => {
+    const tree = await renderScreen({ note: EXISTING });
+    expect(allText(tree.root)).toContain("On arrival");
+    expect(allText(tree.root)).toContain("On leaving");
+    await press(tree, "Save");
+    expect(updateNote).toHaveBeenCalledWith("note-1", expect.objectContaining({ place_trigger: "" }));
+  });
+
+  test("picking On leaving is saved", async () => {
+    const tree = await renderScreen({ note: EXISTING });
+    await press(tree, "On leaving");
+    await press(tree, "Save");
+    expect(updateNote).toHaveBeenCalledWith("note-1", expect.objectContaining({ place_trigger: "leave" }));
+  });
+
+  test("a saved choice is kept, and Smart clears it", async () => {
+    const tree = await renderScreen({ note: { ...EXISTING, place_trigger: "arrive" } });
+    await press(tree, "Save");
+    expect(updateNote).toHaveBeenLastCalledWith("note-1", expect.objectContaining({ place_trigger: "arrive" }));
+    await act(async () => alertSmart(tree).props.onPress());
+    await press(tree, "Save");
+    expect(updateNote).toHaveBeenLastCalledWith("note-1", expect.objectContaining({ place_trigger: "" }));
+  });
+
+  test("a new note can be set to alert on leaving", async () => {
+    const tree = await renderScreen({});
+    await act(async () => {
+      tree.root.findByType(TextInput).props.onChangeText("take the umbrella");
+    });
+    await press(tree, "On leaving");
+    await press(tree, "Save");
+    expect((createNote as jest.Mock).mock.calls[0][12]).toBe("leave");
+  });
+
+  test("Smart says what it found in the note", async () => {
+    const tree = await renderScreen({ note: { ...EXISTING, alert_on: "leave" } });
+    expect(allText(tree.root)).toContain("Smart: on leaving the place");
+  });
 });
 
 test("the back button goes back without saving", async () => {

@@ -77,6 +77,12 @@ export interface NoteCardInfo {
   trailing: Trailing;
 }
 
+// "Gym", or "Leaving Gym" for a note that alerts on walking out of it
+function placeLabel(note: Note, places: ServerPlace[]): string | null {
+  const name = locationLabel(note, places);
+  return name && note.alert_on === "leave" ? `Leaving ${name}` : name;
+}
+
 export function noteCardInfo(
   note: Note,
   places: ServerPlace[],
@@ -115,7 +121,7 @@ export function noteCardInfo(
     // readable on this theme's card (white in light mode, dark green-grey in
     // dark mode): a too-light or too-dark color is shaded, never swapped for grey
     categoryTextColor: readableOn(color, palette.surface),
-    placeName: locationLabel(note, places),
+    placeName: placeLabel(note, places),
     folderName: note.list_name && note.list_name !== GENERAL ? note.list_name : null,
     trailing,
   };
