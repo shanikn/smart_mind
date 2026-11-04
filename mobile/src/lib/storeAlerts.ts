@@ -261,3 +261,10 @@ export function storeAlertMessage(storeName: string, errands: Note[]): { title: 
   const list = listed.join(", ") + (more > 0 ? ` and ${more} more` : "");
   return { title: "Shopping nearby", body: `You're at ${storeName} – on your list: ${list}` };
 }
+
+// Google Maps at the store's exact spot; opens the Maps app if it's installed,
+// else the browser
+export function storeMapsUrl(store: { lat: number; lon: number }): string {
+  const query = encodeURIComponent(`${store.lat},${store.lon}`);
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}

@@ -391,6 +391,55 @@ def is_about_arriving(content: str) -> bool:
     return bool(_arrival_english.search(lower) or _arrival_hebrew.search(lower))
 
 
+# ---- notes about leaving ("when I leave home ...") ----
+#
+# They alert on walking out of the place's radius. Like arrival notes they
+# get no guessed time, and they belong to the place they leave. Same rule:
+# a time word comes first, so "leave a message" is an ordinary to-do.
+_leaving_english = re.compile(
+    r"\b(on my way out"
+    r"|(when|once|after|before|as soon as) i (leave|head out|go out|get out)\b"
+    r"|(when|once|before) i'?m (leaving|heading out)\b"
+    r"|(when|once|before) i am (leaving|heading out)\b)"
+)
+# כש / ברגע ש / לפני ש / אחרי ש, maybe אני, then a verb of leaving:
+# אצא יוצא(ת) נצא, אעזוב עוזב(ת) נעזוב
+_leaving_hebrew = re.compile(
+    "(?:כש|ברגע ש|לפני ש|אחרי ש)"
+    "(?:אני\\s+)?"
+    "(?:אצא|יוצאת?|נצא"
+    "|אעזוב|עוזבת?|נעזוב)"
+)
+
+
+# "leave the keys at home": leave takes an object and puts it somewhere, so
+# it isn't walking out. "leave the office at 6pm" / "in the evening" still is.
+_leave_an_object = re.compile(
+    r"\bleave (?:the|a|an|my|your|our|his|her|their|this|that|these|those) \w+ "
+    r"(?:at|in|on|with|behind|by|outside) "
+    r"(?!\d|noon|night|midnight|lunch|dinner|an? (?:hour|few|minute)"
+    r"|(?:the|this) (?:morning|afternoon|evening|end))"
+)
+
+# "when I head out to work", "כשאצא לעבודה": the place named is where it's
+# going, not the place it leaves
+_leaving_to_english = re.compile(
+    r"\b(?:head(?:ing)?|go(?:ing)?|get(?:ting)?|on my way) out (?:to|for)\b"
+    r"|\bleav(?:e|ing) for\b"
+)
+_leaving_to_hebrew = re.compile("(?:אצא|יוצאת?|נצא)\\s+ל(?!פני)")
+
+
+def is_about_leaving(content: str) -> bool:
+    lower = _leave_an_object.sub("put ", content.lower().replace("’", "'"))
+    return bool(_leaving_english.search(lower) or _leaving_hebrew.search(lower))
+
+
+def _leaving_names_where_to(content: str) -> bool:
+    lower = content.lower().replace("’", "'")
+    return bool(_leaving_to_english.search(lower) or _leaving_to_hebrew.search(lower))
+
+
 def _arrival_destination(content: str, places: list):
     """For a note about arriving, the Home/Uni/Work place it's going to."""
     tokens = _tokens(content)
@@ -554,17 +603,25 @@ def match_place_by_name(content: str, places: list):
 
 def infer_place(content: str, places: list):
     """The user's place a note belongs to, or None.
+    0. a note about heading out to somewhere ("when I head out to work")
+       leaves from Home
     1. a place the note names (match_place_by_name)
-    1b. for a note about arriving, where it's going ("when I get home")
+    1b. for a note about arriving, where it's going ("when I get home"),
+        or about leaving, where it leaves ("when I leave work")
     2. the built-in keywords of Home / Uni / Work
     3. semantic similarity between the note and each place's name + keywords
     """
     if not places:
         return None
+    # "when I head out to work ...": it leaves from home, not from work
+    if is_about_leaving(content) and not is_about_arriving(content) and _leaving_names_where_to(content):
+        home = next((p for p in places if p.kind == "home"), None)
+        if home:
+            return home
     named = match_place_by_name(content, places)
     if named:
         return named
-    if is_about_arriving(content):
+    if is_about_arriving(content) or is_about_leaving(content):
         destination = _arrival_destination(content, places)
         if destination:
             return destination

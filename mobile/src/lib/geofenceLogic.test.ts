@@ -4,6 +4,7 @@ import {
   regionsFromPlaces,
   shouldGeofence,
   shouldNotifyArrival,
+  shouldNotifyLeaving,
 } from "./geofenceLogic";
 import { UNKNOWN, UserPlace } from "./userPlaces";
 
@@ -181,5 +182,19 @@ describe("locationAfterPlaceChange: re-check Where you are now after a place's l
   test("no position or no location for the place: unchanged", () => {
     expect(locationAfterPlaceChange("id-gym", home, null)).toBe("id-gym");
     expect(locationAfterPlaceChange("id-gym", { id: "id-home", coords: null }, at(0))).toBe("id-gym");
+  });
+});
+
+describe("shouldNotifyLeaving (notes that alert on leaving a place)", () => {
+  test("Exit a saved place: a leaving", () => {
+    expect(shouldNotifyLeaving("exit", "id-home", KNOWN)).toBe(true);
+  });
+
+  test("Enter is never a leaving", () => {
+    expect(shouldNotifyLeaving("enter", "id-home", KNOWN)).toBe(false);
+  });
+
+  test("Exit a region that isn't a saved place (deleted, or a store fence): not a leaving", () => {
+    expect(shouldNotifyLeaving("exit", "id-gone", KNOWN)).toBe(false);
   });
 });

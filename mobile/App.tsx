@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from "react";
-import { ActivityIndicator, AppState, View } from "react-native";
+import { ActivityIndicator, AppState, Linking, View } from "react-native";
 import {
   createNavigationContainerRef,
   DarkTheme,
@@ -34,6 +34,7 @@ import { fonts } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/ThemeContext";
 import { linkingFor, MainTabsParamList } from "./src/navigation/linking";
 import { isTap, noteToOpen } from "./src/services/notificationActions";
+import { mapsUrlToOpen } from "./src/lib/notificationActions";
 
 export type NotesStackParamList = {
   NotesList: undefined;
@@ -176,16 +177,27 @@ function RootNavigator() {
     };
   }, [user]);
 
-  // a tap on a note's notification opens that note (also when the tap started the app)
+  // a tap on a note's notification opens that note (also when the tap started
+  // the app); a tap on a store alert opens that store in Google Maps
   const lastResponse = Notifications.useLastNotificationResponse();
   const openedResponseRef = useRef<string | null>(null);
   const pendingNoteRef = useRef<Note | null>(null);
   useEffect(() => {
-    if (!user || !lastResponse || !isTap(lastResponse)) {
+    if (!lastResponse || !isTap(lastResponse)) {
       return;
     }
     const id = lastResponse.notification.request.identifier;
     if (openedResponseRef.current === id) {
+      return;
+    }
+    // a store's Maps link needs no sign-in; a note does
+    const mapsUrl = mapsUrlToOpen(lastResponse);
+    if (mapsUrl) {
+      openedResponseRef.current = id;
+      Linking.openURL(mapsUrl).catch((e) => console.log("Couldn't open Google Maps", e));
+      return;
+    }
+    if (!user) {
       return;
     }
     openedResponseRef.current = id;

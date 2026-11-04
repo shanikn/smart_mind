@@ -24,6 +24,7 @@ import {
   shouldNotifyStore,
   Store,
   storeAlertMessage,
+  storeMapsUrl,
   StoreCache,
   storeRegionId,
   storeRegions,
@@ -330,7 +331,12 @@ export async function handleStoreGeofenceEvent(
     }
     const store = (await readJson<Record<string, StoreInfo>>(KEYS.stores, {}))[regionId];
     const { title, body } = storeAlertMessage(store?.name ?? "a store nearby", errands);
-    const data = { kind: "store", storeType: parsed.storeType, noteIds: errands.map((e) => e._id) };
+    const data = {
+      kind: "store",
+      storeType: parsed.storeType,
+      noteIds: errands.map((e) => e._id),
+      ...(store ? { mapsUrl: storeMapsUrl(store) } : {}), // a tap opens the store in Google Maps
+    };
     if ((await getStoreAlertMode()) === "stop") {
       await alertAfterDwell(regionId, { title, body, data }, visits, now, options.wait ?? sleep);
       return;

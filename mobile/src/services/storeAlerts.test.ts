@@ -174,6 +174,14 @@ describe("arriving at a store (Alert when passing by)", () => {
     expect(notify.mock.calls[0][0].trigger).toBeNull();
   });
 
+  test("the alert carries a Google Maps link to that store", async () => {
+    await handleStoreGeofenceEvent("enter", "store:supermarket:node/1");
+    expect(notify.mock.calls[0][0].content.data).toMatchObject({
+      kind: "store",
+      mapsUrl: "https://www.google.com/maps/search/?api=1&query=32.1001%2C34.8",
+    });
+  });
+
   test("at most once per visit", async () => {
     await handleStoreGeofenceEvent("enter", "store:supermarket:node/1");
     await handleStoreGeofenceEvent("enter", "store:supermarket:node/1");
@@ -247,6 +255,7 @@ describe("Alert when I stop there (the default)", () => {
     expect(delay).toBeGreaterThan(DWELL_MS - 5000);
     expect(delay).toBeLessThanOrEqual(DWELL_MS);
     expect(wait).toHaveBeenCalledWith(DWELL_MS);
+    expect(request.content.data.mapsUrl).toBe("https://www.google.com/maps/search/?api=1&query=32.1001%2C34.8");
   });
 
   test("still within ~60 m after 2 minutes: the alert stays", async () => {

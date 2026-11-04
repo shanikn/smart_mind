@@ -239,3 +239,21 @@ describe("kinds on the card", () => {
     ).toEqual({ kind: "off" });
   });
 });
+
+test("a note that alerts on leaving says so next to its place", () => {
+  const leaving = note({ contexts: ["id-gym"], alert_on: "leave" });
+  expect(noteCardInfo(leaving, PLACES, DEFAULT_CATEGORY_COLORS).placeName).toBe("Leaving Gym");
+  const arriving = note({ contexts: ["id-gym"], alert_on: "arrive" });
+  expect(noteCardInfo(arriving, PLACES, DEFAULT_CATEGORY_COLORS).placeName).toBe("Gym");
+});
+
+test("a leaving note with its own time alerts at that time, so no Leaving", () => {
+  const timed = note({
+    contexts: ["id-gym", "18:00"],
+    alert_on: "leave",
+    remind_time_explicit: true,
+    remind_at_hour: 18,
+    remind_at_minute: 0,
+  });
+  expect(noteCardInfo(timed, PLACES, DEFAULT_CATEGORY_COLORS).placeName).toBe("Gym");
+});

@@ -4,20 +4,28 @@ import { groupNotes, NoteSection } from "./noteSections";
 
 // The notes list has two views: Recent (one list, newest created first) and
 // Upcoming (the date sections). The last choice is kept on this phone.
+// An edited note counts as new in Recent: it sorts by its last edit.
 
 export type NotesView = "recent" | "upcoming";
 
 const STORAGE_KEY = "smartmind.notesView";
 
-function createdTime(note: Note): number | null {
-  const t = note.created_at ? new Date(note.created_at).getTime() : NaN;
+function time(value: string | null | undefined): number | null {
+  const t = value ? new Date(value).getTime() : NaN;
   return Number.isNaN(t) ? null : t;
 }
 
-// newest created first; notes without a valid created_at go last, in their order
+// the later of created and last edited; null without a valid created_at
+function recentTime(note: Note): number | null {
+  const created = time(note.created_at);
+  const edited = time(note.edited_at);
+  return created !== null && edited !== null ? Math.max(created, edited) : created;
+}
+
+// newest created or edited first; notes without a valid created_at go last, in their order
 export function sortRecent(notes: Note[]): Note[] {
   return notes
-    .map((n, i) => ({ n, i, t: createdTime(n) }))
+    .map((n, i) => ({ n, i, t: recentTime(n) }))
     .sort((a, b) => {
       if (a.t !== null && b.t !== null && a.t !== b.t) {
         return b.t - a.t;

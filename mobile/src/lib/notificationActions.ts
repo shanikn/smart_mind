@@ -46,3 +46,16 @@ export function planNotificationResponse(response: ResponseLike): NotificationPl
 export function responseKey(response: ResponseLike): string {
   return `${response.notification.request.identifier}|${response.actionIdentifier}`;
 }
+
+const MAPS_PREFIX = "https://www.google.com/maps/";
+
+// A tap on a store alert opens that store in Google Maps. Only Google Maps
+// links are opened, and only from store alerts.
+export function mapsUrlToOpen(response: ResponseLike): string | null {
+  const data = response.notification.request.content.data;
+  const url = data?.mapsUrl;
+  if (response.actionIdentifier !== DEFAULT_ACTION || data?.kind !== "store") {
+    return null;
+  }
+  return typeof url === "string" && url.startsWith(MAPS_PREFIX) ? url : null;
+}

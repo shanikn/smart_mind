@@ -13,7 +13,7 @@ from agents.clock import local_now  # noqa: E402
 from agents.context import get_location_bucket  # noqa: E402
 from places import get_places  # noqa: E402
 from agents.ranking_policy import score, is_on_cooldown  # noqa: E402
-from agents.categorizer import is_about_arriving  # noqa: E402
+from agents.categorizer import is_about_arriving, is_about_leaving  # noqa: E402
 from agents.embedding_model import get_embedding_model  # noqa: E402
 
 # chromadb setup
@@ -61,6 +61,29 @@ def _context_bonus(note, location_bucket, current_hour, current_minute):
     return loc_bonus + time_bonus
 
 
+PLACE_EVENTS = ("arrive", "leave")
+
+
+def alert_on(note) -> str:
+    """When a note with a place alerts: "leave" (walking out of the place's
+    radius) or "arrive" (walking in, the default). The user's choice wins;
+    otherwise the text decides, and a note that says both ("when I leave
+    work, and when I get home ...") is about arriving."""
+    if note.place_trigger in PLACE_EVENTS:
+        return note.place_trigger
+    if is_about_leaving(note.content) and not is_about_arriving(note.content):
+        return "leave"
+    return "arrive"
+
+
+def _is_arrival_note(note) -> bool:
+    """About arriving, in its text or by the user's choice (a note set to
+    On leaving isn't, whatever its text says)."""
+    if note.place_trigger == "leave":
+        return False
+    return note.place_trigger == "arrive" or is_about_arriving(note.content)
+
+
 MAX_RESULTS = 3
 _OLDEST = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -78,7 +101,7 @@ def _created(note):
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def _rank_for_place(notes, location_bucket, current_hour, current_minute):
+def _rank_for_place(notes, location_bucket, current_hour, current_minute, event=None):
     """Notes about arriving ("when I get home ...") first, every one of them:
     they're why you came. Others fill up to MAX_RESULTS. Best score first,
     newest first on equal scores, so older notes can't hide a new one."""
@@ -86,8 +109,10 @@ def _rank_for_place(notes, location_bucket, current_hour, current_minute):
         return (score(note) + _context_bonus(note, location_bucket, current_hour, current_minute), _created(note))
 
     ranked = sorted(notes, key=key, reverse=True)
-    arriving = [n for n in ranked if is_about_arriving(n.content)]
-    others = [n for n in ranked if not is_about_arriving(n.content)]
+    if event == "leave":
+        return ranked  # every note about leaving: they're why it alerts
+    arriving = [n for n in ranked if _is_arrival_note(n)]
+    others = [n for n in ranked if not _is_arrival_note(n)]
     return arriving + others[:max(0, MAX_RESULTS - len(arriving))]
 
 
@@ -95,8 +120,12 @@ def _rank_for_place(notes, location_bucket, current_hour, current_minute):
 # by semantic search fallback
 def get_relevant_notes(
     query: str, location: str = "unknown", hour: Optional[int] = None,
-    minute: Optional[int] = None, user_id: Optional[str] = None
+    minute: Optional[int] = None, user_id: Optional[str] = None,
+    event: Optional[str] = None,
 ):
+    """event: "arrive" (walked into the place: notes about leaving it stay
+    out), "leave" (walked out: only notes about leaving it, no meaning-based
+    fallback), or None (every note for the place, as before)."""
     now = local_now()  # the users' local day and hour, not the server's UTC
     today_str = now.strftime("%Y-%m-%d")
     current_hour = hour if hour is not None else now.hour
@@ -119,8 +148,12 @@ def get_relevant_notes(
             n for n in candidates
             if not is_on_cooldown(n) and _is_due_today(n, today_str)
         ]
+        if event is not None:
+            candidates = [n for n in candidates if alert_on(n) == event]
         if candidates:
-            return _rank_for_place(candidates, location_bucket, current_hour, current_minute)
+            return _rank_for_place(candidates, location_bucket, current_hour, current_minute, event)
+    if event == "leave":
+        return []
 
     # fallback: semantic search when location is unknown or no matches
     embedding = get_embedding_model().encode(query).tolist()
@@ -154,6 +187,7 @@ def get_relevant_notes(
         and not is_on_cooldown(x)
         and _is_due_today(x, today_str)
         and not _has_conflicting_location(x, location_bucket, place_ids)
+        and (event is None or alert_on(x) == event)
     ]
     ranked = sorted(
         filtered,

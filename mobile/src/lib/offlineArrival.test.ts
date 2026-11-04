@@ -119,3 +119,24 @@ describe("arrival notes ('when I get home ...') and ties, like the server", () =
     expect(ids(offlineReminders(notes, HOME, NOW))).toEqual(["liked", "newest", "middle"]);
   });
 });
+
+describe("arriving or leaving, like the server", () => {
+  const leave = () => note("when I leave home take the umbrella", { alert_on: "leave" });
+
+  test("arriving: notes about leaving stay out", () => {
+    expect(ids(offlineReminders([leave(), note("water the plants")], HOME, NOW, "arrive"))).toEqual([
+      "water the plants",
+    ]);
+  });
+
+  test("leaving: only notes about leaving, every one of them", () => {
+    const notes = [1, 2, 3, 4].map((i) => note(`leave thing ${i}`, { alert_on: "leave" }));
+    const shown = offlineReminders([note("water the plants"), ...notes], HOME, NOW, "leave");
+    expect(shown).toHaveLength(4);
+    expect(ids(shown)).not.toContain("water the plants");
+  });
+
+  test("no event: every note for the place, as before", () => {
+    expect(offlineReminders([leave(), note("water the plants")], HOME, NOW)).toHaveLength(2);
+  });
+});

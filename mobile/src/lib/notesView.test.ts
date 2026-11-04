@@ -27,6 +27,21 @@ describe("sortRecent", () => {
     expect(sortRecent([noDate, old, bad, newest]).map((n) => n._id)).toEqual(["newest", "old", "noDate", "bad"]);
   });
 
+  test("an edited note counts as new: it goes up by its edit time", () => {
+    const editedOld = note("editedOld", "2026-09-01T10:00:00", { edited_at: "2026-10-04T12:00:00" });
+    expect(sortRecent([newest, middle, editedOld]).map((n) => n._id)).toEqual(["editedOld", "newest", "middle"]);
+  });
+
+  test("an edit earlier than a newer note keeps it below that note", () => {
+    const editedOld = note("editedOld", "2026-09-01T10:00:00", { edited_at: "2026-10-02T08:00:00" });
+    expect(sortRecent([newest, middle, editedOld]).map((n) => n._id)).toEqual(["newest", "editedOld", "middle"]);
+  });
+
+  test("a bad edit time is ignored; the created time still counts", () => {
+    const badEdit = note("badEdit", "2026-10-02T08:00:00", { edited_at: "not a date" });
+    expect(sortRecent([newest, middle, badEdit]).map((n) => n._id)).toEqual(["newest", "badEdit", "middle"]);
+  });
+
   test("doesn't change the input", () => {
     const input = [old, newest];
     sortRecent(input);

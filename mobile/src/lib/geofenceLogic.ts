@@ -110,6 +110,12 @@ export function shouldNotifyArrival(
   return registeredAt === null || now - registeredAt >= graceMs;
 }
 
+// Exit from a saved place: its notes about leaving it alert. Android and
+// iOS only report Exit after an Enter, so there's no initial-event window.
+export function shouldNotifyLeaving(event: GeofenceEvent, regionId: string, knownPlaceIds: Set<string>): boolean {
+  return event === "exit" && knownPlaceIds.has(regionId);
+}
+
 function regionKey(r: GeofenceRegion): string {
   return [r.identifier, r.latitude, r.longitude, r.radius, r.notifyOnEnter, r.notifyOnExit].join("|");
 }

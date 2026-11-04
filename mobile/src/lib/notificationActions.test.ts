@@ -3,6 +3,7 @@ import {
   ACTION_LATER,
   ACTION_NOT_USEFUL,
   DEFAULT_ACTION,
+  mapsUrlToOpen,
   planNotificationResponse,
   responseKey,
   SNOOZE_SECONDS,
@@ -40,4 +41,17 @@ test("Later snoozes for an hour", () => {
 test("one key per notification and button, so a press handled twice runs once", () => {
   expect(responseKey(response(ACTION_DONE))).toBe("req-1|done");
   expect(responseKey(response(ACTION_LATER))).toBe("req-1|later");
+});
+
+const MAPS = "https://www.google.com/maps/search/?api=1&query=32.1%2C34.8";
+
+test("a tap on a store alert opens that store in Google Maps", () => {
+  expect(mapsUrlToOpen(response(DEFAULT_ACTION, { kind: "store", noteIds: ["a"], mapsUrl: MAPS }))).toBe(MAPS);
+});
+
+test("no Maps link: a note's notification, an old store alert, a button, or a link that isn't Google Maps", () => {
+  expect(mapsUrlToOpen(response(DEFAULT_ACTION))).toBeNull();
+  expect(mapsUrlToOpen(response(DEFAULT_ACTION, { kind: "store", noteIds: ["a"] }))).toBeNull();
+  expect(mapsUrlToOpen(response(ACTION_DONE, { kind: "store", mapsUrl: MAPS }))).toBeNull();
+  expect(mapsUrlToOpen(response(DEFAULT_ACTION, { kind: "store", mapsUrl: "https://evil.example/maps" }))).toBeNull();
 });

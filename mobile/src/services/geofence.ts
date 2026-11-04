@@ -11,6 +11,7 @@ import {
   regionsFromPlaces,
   shouldGeofence,
   shouldNotifyArrival,
+  shouldNotifyLeaving,
 } from "../lib/geofenceLogic";
 import { getAllCoords } from "../lib/userPlaces";
 import { loadPlaces } from "./placesStore";
@@ -87,9 +88,16 @@ TaskManager.defineTask<{
       await checkAndNotifyReminders({ onArrival: true });
     }
     // a saved place: notes with a time and this place (missed while away?
-    // alert now) and their alarms, re-planned for being here or not
+    // alert now) and their alarms, re-planned for being here or not. First,
+    // so walking out cancels the place's alarms before the (maybe slow)
+    // leaving check below
     if (signedIn && knownPlaceIds.has(regionId)) {
       await onPlaceGeofenceEvent(event, regionId, notify);
+    }
+    // walked out of a saved place: its notes about leaving it
+    // ("when I leave home take the umbrella")
+    if (signedIn && shouldNotifyLeaving(event, regionId, knownPlaceIds)) {
+      await checkAndNotifyReminders({ onLeave: regionId });
     }
   } catch (e) {
     console.log("Geofence task failed", e);
