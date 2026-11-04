@@ -122,10 +122,11 @@ def compute_enrichment(note: Note, places: list, now: datetime) -> dict:
     # "when I get home ..." alerts on arriving (and "when I leave home ..."
     # on leaving), so it gets no guessed time: only a clock time written in
     # it ("when I get home at 18:00"). Same when the user chose arriving or
-    # leaving for the note.
+    # leaving for the note and it has a place (with no place, the choice
+    # can't alert, so the note keeps its usual time).
     arriving = (
         is_about_arriving(note.content) or is_about_leaving(note.content)
-        or note.place_trigger is not None
+        or (note.place_trigger is not None and place is not None)
     )
     if note.remind_time_explicit and note.remind_at_hour is not None:
         minute = note.remind_at_minute or 0

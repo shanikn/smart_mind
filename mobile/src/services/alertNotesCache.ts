@@ -49,6 +49,7 @@ function slim(n: Note): Note {
     reminder_time_source: n.reminder_time_source ?? null,
     store_type: n.store_type ?? null,
     alert_on: n.alert_on ?? null, // arriving or leaving
+    place_trigger: n.place_trigger ?? null, // the user's choice: offline ranking puts On arrival first
     useful_count: n.useful_count ?? 0,
     dismissed_count: n.dismissed_count ?? 0,
     created_at: n.created_at, // offline ranking: newest first on equal scores

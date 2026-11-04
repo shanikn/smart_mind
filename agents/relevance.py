@@ -77,7 +77,10 @@ def alert_on(note) -> str:
 
 
 def _is_arrival_note(note) -> bool:
-    """About arriving, in its text or by the user's choice."""
+    """About arriving, in its text or by the user's choice (a note set to
+    On leaving isn't, whatever its text says)."""
+    if note.place_trigger == "leave":
+        return False
     return note.place_trigger == "arrive" or is_about_arriving(note.content)
 
 

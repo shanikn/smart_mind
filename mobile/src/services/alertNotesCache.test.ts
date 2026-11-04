@@ -64,6 +64,7 @@ test("keeps only notes that can alert, with what the arrival check needs", async
     reminder_time_source: null,
     store_type: null,
     alert_on: null,
+    place_trigger: null,
     useful_count: 1,
     dismissed_count: 0,
     created_at: "2026-10-01T10:00:00", // offline ranking: newest first on ties
@@ -74,6 +75,11 @@ test("keeps only notes that can alert, with what the arrival check needs", async
 test("keeps whether a note alerts on arriving or on leaving", async () => {
   await saveAlertNotes([note("a", { alert_on: "leave" })], "uid-a");
   expect((await readAlertNotes("uid-a"))[0].alert_on).toBe("leave");
+});
+
+test("keeps the user's On arrival choice for the offline ranking", async () => {
+  await saveAlertNotes([note("a", { place_trigger: "arrive" })], "uid-a");
+  expect((await readAlertNotes("uid-a"))[0].place_trigger).toBe("arrive");
 });
 
 test("another user's cache is never used", async () => {

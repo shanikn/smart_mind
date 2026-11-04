@@ -101,6 +101,36 @@ def test_a_chosen_trigger_drops_the_guessed_time():
     assert note.contexts == ["p-home"]
 
 
+def test_a_chosen_trigger_with_no_place_keeps_its_date_alarm():
+    # no place to arrive at or leave, so the day's morning alarm is all it has
+    note = _enrich("pay the bill on 20/11", place_trigger="leave", places=[])
+    assert note.remind_on_date == "2026-11-20"
+    assert note.contexts == ["08:00"]
+
+
+def test_leaving_an_object_somewhere_is_not_leaving_the_place():
+    for text in [
+        "when I leave the keys at home, call Sam",
+        "before I leave my bag at work buy a lock",
+    ]:
+        assert not is_about_leaving(text), text
+        assert alert_on(Note(content=text)) == "arrive"
+    for text in [
+        "before I leave the office at 6pm print the slides",
+        "when I leave the house in the morning take the umbrella",
+    ]:
+        assert is_about_leaving(text), text
+
+
+def test_heading_out_to_work_leaves_from_home():
+    for text in ["when I head out to work, pick up coffee", "כשאצא לעבודה לקנות קפה"]:
+        note = _enrich(text)
+        assert note.contexts[0] == "p-home", text
+        assert alert_on(note) == "leave"
+    # leaving work itself still belongs to Work
+    assert _enrich("when I leave work call mom").contexts[0] == "p-work"
+
+
 # ---- GET /reminders for a place, on arriving or on leaving ----
 
 def _at_home(monkeypatch, notes, event=None):
@@ -150,6 +180,15 @@ def test_no_event_keeps_every_note_for_the_place(monkeypatch):
     # older phones and the reminders screen: unchanged behavior
     notes = [_home_note("when I leave home take the umbrella"), _home_note("water the plants")]
     assert len(_at_home(monkeypatch, notes)) == 2
+
+
+def test_a_note_set_to_leaving_is_not_an_arrival_note():
+    # its text says "when I get home", but the user chose On leaving: it
+    # mustn't take an arrival note's spot ahead of the capped other notes
+    from agents.relevance import _is_arrival_note
+    assert not _is_arrival_note(Note(content="when I get home feed the cat", place_trigger="leave"))
+    assert _is_arrival_note(Note(content="when I get home feed the cat"))
+    assert _is_arrival_note(Note(content="feed the cat", place_trigger="arrive"))
 
 
 def test_reminders_rejects_an_unknown_event():

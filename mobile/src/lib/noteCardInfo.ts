@@ -3,6 +3,7 @@ import React from "react";
 import { Note } from "../types/notes";
 import { lightColors, Palette } from "../theme";
 import { canAlert } from "./alertRules";
+import { alertsOnLeaving, hasSpecificTime } from "./arrivalNotes";
 import {
   Category,
   categoryLabel,
@@ -77,10 +78,11 @@ export interface NoteCardInfo {
   trailing: Trailing;
 }
 
-// "Gym", or "Leaving Gym" for a note that alerts on walking out of it
+// "Gym", or "Leaving Gym" for a note that alerts on walking out of it (a
+// note with its own time alerts at that time, so it's just "Gym")
 function placeLabel(note: Note, places: ServerPlace[]): string | null {
   const name = locationLabel(note, places);
-  return name && note.alert_on === "leave" ? `Leaving ${name}` : name;
+  return name && alertsOnLeaving(note) && !hasSpecificTime(note) ? `Leaving ${name}` : name;
 }
 
 export function noteCardInfo(

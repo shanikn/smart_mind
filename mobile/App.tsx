@@ -183,19 +183,24 @@ function RootNavigator() {
   const openedResponseRef = useRef<string | null>(null);
   const pendingNoteRef = useRef<Note | null>(null);
   useEffect(() => {
-    if (!user || !lastResponse || !isTap(lastResponse)) {
+    if (!lastResponse || !isTap(lastResponse)) {
       return;
     }
     const id = lastResponse.notification.request.identifier;
     if (openedResponseRef.current === id) {
       return;
     }
-    openedResponseRef.current = id;
+    // a store's Maps link needs no sign-in; a note does
     const mapsUrl = mapsUrlToOpen(lastResponse);
     if (mapsUrl) {
+      openedResponseRef.current = id;
       Linking.openURL(mapsUrl).catch((e) => console.log("Couldn't open Google Maps", e));
       return;
     }
+    if (!user) {
+      return;
+    }
+    openedResponseRef.current = id;
     noteToOpen(lastResponse).then((note) => {
       if (!note) {
         return;
